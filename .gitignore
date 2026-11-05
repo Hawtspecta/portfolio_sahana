@@ -25,6 +25,7 @@
 *.pem
 *.zip
 *.mp4
+!public/assets/transition/pc_click.mp4
 *.ani
 *.cur
 

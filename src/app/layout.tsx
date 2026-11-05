@@ -14,11 +14,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-        <html lang="en" className="h-full w-full antialiased select-none">
-          <body className="min-h-full w-full flex flex-col bg-black">
-            <CustomCursor />
-            {children}
-          </body>
-        </html>
-        );
+    <html lang="en" className="h-full w-full antialiased select-none">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+        <link
+          href="https://fonts.googleapis.com/css2?family=Creepster&family=Special+Elite&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="min-h-full w-full flex flex-col bg-black">
+        <CustomCursor />
+        {children}
+      </body>
+    </html>
+  );
 }

@@ -5,12 +5,28 @@ import SplashScreen from "@/components/SplashScreen";
 import HeroSection from "@/components/HeroSection";
 import MetaBalls from "@/components/MetaBalls";
 import AboutTransition from "@/components/AboutTransition";
+import PortfolioSection from "@/components/PortfolioSection";
+import { initGlobalLenis, useLenis } from "@/lib/lenis";
 
 export default function Home() {
   const [isLastFrame, setIsLastFrame] = useState(false);
   const [isHeroVideoCompleted, setIsHeroVideoCompleted] = useState(false);
   const [isAboutActive, setIsAboutActive] = useState(false);
   const [transitionProgress, setTransitionProgress] = useState(0);
+
+  const lenis = useLenis();
+
+  // Set manual scroll restoration to prevent browser from auto-scrolling on updates
+  useEffect(() => {
+    if (typeof window !== "undefined" && "scrollRestoration" in window.history) {
+      window.history.scrollRestoration = "manual";
+    }
+  }, []);
+
+  // ─── Unified Global Lenis Engine Lifecycle ─────────────────────────
+  useEffect(() => {
+    return initGlobalLenis();
+  }, []);
 
   // Press 'F' to toggle browser fullscreen if desired
   useEffect(() => {
@@ -55,6 +71,11 @@ export default function Home() {
     setIsHeroVideoCompleted(false);
   }, []);
 
+  // Transition progress handler
+  const handleProgressChange = useCallback((progress: number) => {
+    setTransitionProgress(progress);
+  }, []);
+
   // Clicking "Scroll to explore" activates the transition
   const handleScrollToExploreClick = useCallback(() => {
     if (!isHeroVideoCompleted) return;
@@ -65,6 +86,7 @@ export default function Home() {
     <>
       {/* Scroll-linked image sequence splash (frames 6..201, Lenis backward scrub) */}
       <SplashScreen
+        lenis={lenis}
         onLastFrameChange={handleLastFrameChange}
         isHeroActive={isLastFrame}
         onScrollPastHero={handleScrollPastHero}
@@ -74,6 +96,7 @@ export default function Home() {
 
       {/* Hero Canvas Section (80 frames, liquid Lenis scroll backward & forward) */}
       <HeroSection
+        lenis={lenis}
         isActive={isLastFrame}
         isAboutActive={isAboutActive}
         onHeroComplete={() => setIsHeroVideoCompleted(true)}
@@ -107,13 +130,11 @@ export default function Home() {
         </div>
       )}
 
-      {/* Flanking MetaBalls — active at the Hero typewriter view, smoothly fading out as About scrub begins */}
+      {/* Flanking MetaBalls — active at the Hero typewriter view, collapse/burst during About transition */}
       {isLastFrame && (
         <div
-          className={`fixed inset-0 z-[55] pointer-events-none transition-opacity duration-300 ease-out ${
-            transitionProgress < 0.03 && (!isAboutActive || transitionProgress === 0)
-              ? "opacity-100"
-              : "opacity-0"
+          className={`fixed inset-0 z-[55] pointer-events-none transition-opacity duration-700 ease-in-out ${
+            transitionProgress > 70 / 105 ? "hidden" : ""
           }`}
         >
           {/* Left MetaBalls — 2 blobs, expansive contour rings */}
@@ -136,7 +157,9 @@ export default function Home() {
               lineWidth={1.2}
               rings={6}
               spacing={0.56}
-              paused={!isLastFrame || transitionProgress > 0.05}
+              paused={!isLastFrame || transitionProgress > 70 / 105}
+              collapseProgress={isAboutActive ? Math.min(1, transitionProgress / (70 / 105)) : 0}
+              dpr={1.2}
             />
           </div>
 
@@ -160,7 +183,9 @@ export default function Home() {
               lineWidth={1.3}
               rings={6}
               spacing={0.58}
-              paused={!isLastFrame || transitionProgress > 0.05}
+              paused={!isLastFrame || transitionProgress > 70 / 105}
+              collapseProgress={isAboutActive ? Math.min(1, transitionProgress / (70 / 105)) : 0}
+              dpr={1.2}
             />
           </div>
         </div>
@@ -168,10 +193,14 @@ export default function Home() {
 
       {/* Lenis Smooth Scroll-based About Transition (106 high-DPI frames, zero glitch) */}
       <AboutTransition
+        lenis={lenis}
         isActive={isAboutActive}
-        onProgressChange={setTransitionProgress}
+        onProgressChange={handleProgressChange}
         onScrollBackToHero={handleScrollBackFromAbout}
       />
+
+      {/* Portfolio section — bg_port background + interactive PC overlay after transition completes */}
+      <PortfolioSection isActive={isAboutActive && transitionProgress >= 0.98} />
     </>
   );
 }

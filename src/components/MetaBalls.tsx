@@ -30,6 +30,8 @@ export interface MetaBallsProps {
   dpr?: number;
   seed?: number;
   style?: React.CSSProperties;
+  /** 0 = normal, 0→1 = collapse/burst animation. At 1 the balls are fully gone. */
+  collapseProgress?: number;
 }
 
 const MAX_BALLS = 50;
@@ -232,7 +234,8 @@ const MetaBalls: React.FC<MetaBallsProps> = ({
   paused = false,
   dpr,
   seed = 0,
-  style
+  style,
+  collapseProgress = 0
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -259,7 +262,8 @@ const MetaBalls: React.FC<MetaBallsProps> = ({
     clickBurst,
     paused,
     dpr,
-    seed
+    seed,
+    collapseProgress
   };
   const settingsRef = useRef(settings);
   const introRef = useRef(intro);
@@ -330,11 +334,13 @@ const MetaBalls: React.FC<MetaBallsProps> = ({
     let raf = 0;
     let last = 0;
     let dirty = true;
+    let cachedRect: DOMRect | null = null;
 
     const resize = () => {
       const rect = container.getBoundingClientRect();
+      cachedRect = rect;
       const s = settingsRef.current;
-      const ratio = Math.max(0.5, Math.min(s.dpr ?? (typeof window !== 'undefined' ? window.devicePixelRatio : 1) ?? 1, 2));
+      const ratio = Math.max(0.5, Math.min(s.dpr ?? (typeof window !== 'undefined' ? window.devicePixelRatio : 1) ?? 1, 1.5));
       view.width = Math.max(1, rect.width);
       view.height = Math.max(1, rect.height);
       view.ratio = ratio;
@@ -345,7 +351,7 @@ const MetaBalls: React.FC<MetaBallsProps> = ({
     };
 
     const toWorld = (clientX: number, clientY: number) => {
-      const rect = container.getBoundingClientRect();
+      const rect = cachedRect || container.getBoundingClientRect();
       const scale = settingsRef.current.animationSize / Math.max(1, rect.height);
       return {
         x: (clientX - rect.left - rect.width / 2) * scale,
@@ -413,66 +419,115 @@ const MetaBalls: React.FC<MetaBallsProps> = ({
     const step = (h: number, s: typeof settings, count: number, look: { size: number; time: number }) => {
       const { reach } = bridge(s);
       const pull = 36 * clamp(s.stickiness, 0, 1);
-      const cursorRadius = s.cursorBallSize * VISIBLE * look.size * (1 + cursor.pulse);
+      const cp = clamp(s.collapseProgress ?? 0, 0, 1);
+      const cursorRadius = s.cursorBallSize * VISIBLE * look.size * (1 + cursor.pulse) * (cp < 0.45 ? 1 - cp * 0.6 : Math.max(0, 1 - cp * 2));
       phase += h * s.speed;
+
+      // Collapse phase: pull toward center then burst
+      const collapsePhase = cp < 0.45 ? 'implode' : cp < 0.55 ? 'burst' : cp < 1 ? 'scatter' : 'gone';
 
       for (let i = 0; i < count; i++) {
         const ball = balls[i];
-        const [x, y] = anchor(ball, s, release(ball, look));
+        let [x, y] = anchor(ball, s, release(ball, look));
+
+        if (collapsePhase === 'implode') {
+          // Pull anchors toward center — easeIn for acceleration
+          const t = cp / 0.45;
+          const implosion = t * t * t; // cubic ease-in
+          x *= (1 - implosion);
+          y *= (1 - implosion);
+        } else if (collapsePhase === 'burst' || collapsePhase === 'scatter') {
+          // Anchors stay at center during burst/scatter
+          x = 0;
+          y = 0;
+        }
+
         ball.avx = clamp((x - ball.ax) / h, -40, 40);
         ball.avy = clamp((y - ball.ay) / h, -40, 40);
         ball.ax = x;
         ball.ay = y;
-        ball.fx = 20 * (x - ball.x) - 5.4 * (ball.vx - ball.avx);
-        ball.fy = 20 * (y - ball.y) - 5.4 * (ball.vy - ball.avy);
+
+        if (collapsePhase === 'implode') {
+          // Strong spring pull toward center as collapse progresses
+          const t = cp / 0.45;
+          const springStrength = 20 + 80 * t * t;
+          ball.fx = springStrength * (x - ball.x) - 5.4 * (ball.vx - ball.avx);
+          ball.fy = springStrength * (y - ball.y) - 5.4 * (ball.vy - ball.avy);
+        } else if (collapsePhase === 'burst') {
+          // Explosive burst outward from center
+          const burstForce = 280;
+          // Use ball's hash to give each ball a unique burst angle offset
+          const h1 = hash31(i + 1);
+          const angleOffset = h1[0] * 0.4 - 0.2;
+          const angle = Math.atan2(ball.y, ball.x) + angleOffset;
+          ball.fx = Math.cos(angle) * burstForce;
+          ball.fy = Math.sin(angle) * burstForce;
+          // Add some spin
+          ball.vx += Math.cos(angle) * 45 * h;
+          ball.vy += Math.sin(angle) * 45 * h;
+        } else if (collapsePhase === 'scatter') {
+          // Light drag during scatter — balls coast outward
+          ball.fx = -ball.vx * 2;
+          ball.fy = -ball.vy * 2;
+        } else {
+          ball.fx = 0;
+          ball.fy = 0;
+        }
+
+        if (collapsePhase !== 'implode') continue;
+
+        // Only apply normal anchor spring for implode phase (already handled above)
       }
 
-      for (let i = 0; i < count; i++) {
-        const p = balls[i];
-        const rp = p.radius * VISIBLE * look.size;
-        for (let j = i + 1; j < count; j++) {
-          const q = balls[j];
-          const rq = q.radius * VISIBLE * look.size;
-          const dx = q.x - p.x;
-          const dy = q.y - p.y;
+      // Normal inter-ball and cursor forces only when not collapsing
+      if (cp < 0.01) {
+        for (let i = 0; i < count; i++) {
+          const p = balls[i];
+          const rp = p.radius * VISIBLE * look.size;
+          for (let j = i + 1; j < count; j++) {
+            const q = balls[j];
+            const rq = q.radius * VISIBLE * look.size;
+            const dx = q.x - p.x;
+            const dy = q.y - p.y;
+            const distance = Math.hypot(dx, dy) || 1e-4;
+            const far = (rp + rq) * reach;
+            if (distance >= far) continue;
+            const core = (rp + rq) * 0.62;
+            let force: number;
+            if (distance < core) force = -60 * (core - distance);
+            else {
+              const t = (distance - core) / (far - core);
+              force = pull * Math.min(rp, rq) * smoothstep(0, 0.6, t) * (1 - smoothstep(0.82, 1, t));
+            }
+            const nx = dx / distance;
+            const ny = dy / distance;
+            const mp = rp * rp + 0.05;
+            const mq = rq * rq + 0.05;
+            p.fx += (nx * force) / mp;
+            p.fy += (ny * force) / mp;
+            q.fx -= (nx * force) / mq;
+            q.fy -= (ny * force) / mq;
+          }
+          const dx = cursor.x - p.x;
+          const dy = cursor.y - p.y;
           const distance = Math.hypot(dx, dy) || 1e-4;
-          const far = (rp + rq) * reach;
-          if (distance >= far) continue;
-          const core = (rp + rq) * 0.62;
-          let force: number;
-          if (distance < core) force = -60 * (core - distance);
-          else {
-            const t = (distance - core) / (far - core);
-            force = pull * Math.min(rp, rq) * smoothstep(0, 0.6, t) * (1 - smoothstep(0.82, 1, t));
+          const far = (rp + cursorRadius) * reach;
+          if (distance < far) {
+            const core = (rp + cursorRadius) * 0.62;
+            let force: number;
+            if (distance < core) force = -140 * (core - distance);
+            else {
+              const t = (distance - core) / (far - core);
+              force = pull * 0.6 * rp * smoothstep(0, 0.6, t) * (1 - smoothstep(0.82, 1, t));
+            }
+            p.fx += ((dx / distance) * force) / (rp * rp + 0.05);
+            p.fy += ((dy / distance) * force) / (rp * rp + 0.05);
           }
-          const nx = dx / distance;
-          const ny = dy / distance;
-          const mp = rp * rp + 0.05;
-          const mq = rq * rq + 0.05;
-          p.fx += (nx * force) / mp;
-          p.fy += (ny * force) / mp;
-          q.fx -= (nx * force) / mq;
-          q.fy -= (ny * force) / mq;
-        }
-        const dx = cursor.x - p.x;
-        const dy = cursor.y - p.y;
-        const distance = Math.hypot(dx, dy) || 1e-4;
-        const far = (rp + cursorRadius) * reach;
-        if (distance < far) {
-          const core = (rp + cursorRadius) * 0.62;
-          let force: number;
-          if (distance < core) force = -140 * (core - distance);
-          else {
-            const t = (distance - core) / (far - core);
-            force = pull * 0.6 * rp * smoothstep(0, 0.6, t) * (1 - smoothstep(0.82, 1, t));
-          }
-          p.fx += ((dx / distance) * force) / (rp * rp + 0.05);
-          p.fy += ((dy / distance) * force) / (rp * rp + 0.05);
         }
       }
 
       const halfHeight = s.animationSize / 2;
-      const limitY = halfHeight * 0.58;
+      const limitY = collapsePhase === 'scatter' || collapsePhase === 'burst' ? halfHeight * 5 : halfHeight * 0.58;
       for (let i = 0; i < count; i++) {
         const ball = balls[i];
         ball.vx += ball.fx * h;
@@ -560,16 +615,45 @@ const MetaBalls: React.FC<MetaBallsProps> = ({
       const count = clamp(Math.round(s.ballCount), 0, MAX_BALLS);
       const look = presence();
       const { gamma, threshold } = bridge(s);
+      const cp = clamp(s.collapseProgress ?? 0, 0, 1);
+
+      // Radius scale during collapse:
+      // implode (0-0.45): shrink to ~40% as balls merge toward center
+      // burst (0.45-0.55): briefly expand to ~60% (the burst pop)
+      // scatter (0.55-1.0): shrink to 0
+      let radiusScale = 1;
+      if (cp > 0) {
+        if (cp < 0.45) {
+          const t = cp / 0.45;
+          radiusScale = 1 - t * 0.6; // 1 → 0.4
+        } else if (cp < 0.55) {
+          const t = (cp - 0.45) / 0.1;
+          radiusScale = 0.4 + t * 0.2; // 0.4 → 0.6 (burst pop)
+        } else {
+          const t = (cp - 0.55) / 0.45;
+          radiusScale = 0.6 * (1 - easeOut(t)); // 0.6 → 0
+        }
+      }
+
+      // Increase ring count and spacing during collapse for visual drama
+      let collapseRings = s.rings;
+      let collapseSpacing = s.spacing;
+      if (cp > 0 && cp < 0.55) {
+        const t = cp / 0.55;
+        collapseRings = s.rings + t * 4; // more rings as they collapse
+        collapseSpacing = s.spacing * (1 + t * 0.5); // wider spacing
+      }
+
       for (let i = 0; i < count; i++) {
         const ball = balls[i];
-        const radius = ball.radius * look.size;
+        const radius = ball.radius * look.size * radiusScale;
         ballData[i * 4] = ball.x;
         ballData[i * 4 + 1] = ball.y;
         ballData[i * 4 + 2] = radius * radius;
         ballData[i * 4 + 3] = 0;
         shapeOf(ball, shapeData, i * 4);
       }
-      const cursorRadius = s.cursorBallSize * look.size * (1 + cursor.pulse);
+      const cursorRadius = s.cursorBallSize * look.size * (1 + cursor.pulse) * radiusScale;
       ballData[count * 4] = cursor.x;
       ballData[count * 4 + 1] = cursor.y;
       ballData[count * 4 + 2] = cursorRadius * cursorRadius;
@@ -580,15 +664,15 @@ const MetaBalls: React.FC<MetaBallsProps> = ({
       gl.uniform1f(loc.scale, s.animationSize / canvas.height);
       gl.uniform4fv(loc.balls, ballData);
       gl.uniform4fv(loc.shapes, shapeData);
-      gl.uniform1i(loc.count, count + 1);
+      gl.uniform1i(loc.count, radiusScale > 0.001 ? count + 1 : 0); // skip draw when fully gone
       gl.uniform1f(loc.gamma, gamma);
       gl.uniform1f(loc.threshold, threshold);
       gl.uniform3fv(loc.color, rgb(s.color));
       gl.uniform3fv(loc.cursorColor, rgb(s.cursorBallColor));
       gl.uniform1i(loc.variant, VARIANTS[s.variant] ?? 0);
       gl.uniform1f(loc.line, Math.max(0.25, s.lineWidth) * view.ratio);
-      gl.uniform1f(loc.spacing, Math.max(0.05, s.spacing));
-      gl.uniform1f(loc.rings, clamp(Math.round(s.rings), 0, 12));
+      gl.uniform1f(loc.spacing, Math.max(0.05, collapseSpacing));
+      gl.uniform1f(loc.rings, clamp(Math.round(collapseRings), 0, 12));
       gl.uniform1f(loc.opaque, s.enableTransparency ? 0 : 1);
       gl.clearColor(0, 0, 0, s.enableTransparency ? 0 : 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
