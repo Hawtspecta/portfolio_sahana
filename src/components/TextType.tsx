@@ -2,7 +2,6 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { gsap } from 'gsap';
-import './TextType.css';
 
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
@@ -88,6 +87,20 @@ const typoFor = (char: string): string | null => {
   return char === char.toLowerCase() ? pick : pick.toUpperCase();
 };
 
+export interface TextLineRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface CharacterProgress {
+  charCount: number;
+  totalChars: number;
+  currentText: string;
+  lineRects: TextLineRect[];
+}
+
 export interface TextTypeProps extends React.HTMLAttributes<HTMLElement> {
   text: string | string[];
   as?: React.ElementType;
@@ -113,6 +126,7 @@ export interface TextTypeProps extends React.HTMLAttributes<HTMLElement> {
   textColors?: string[];
   variableSpeed?: { min: number; max: number };
   onSentenceComplete?: (sentence: string, index: number) => void;
+  onCharacterProgress?: (progress: CharacterProgress) => void;
   startOnVisible?: boolean;
   reverseMode?: boolean;
 }
@@ -148,6 +162,7 @@ const TextType: React.FC<TextTypeProps> = ({
   textColors = [],
   variableSpeed,
   onSentenceComplete,
+  onCharacterProgress,
   startOnVisible = false,
   reverseMode = false,
   ...props
@@ -169,6 +184,7 @@ const TextType: React.FC<TextTypeProps> = ({
   const placeCursor = useRef<((instant?: boolean) => void) | null>(null);
   const lastTypo = useRef(-1);
   const onSentenceCompleteRef = useRef(onSentenceComplete);
+  const onCharacterProgressRef = useRef(onCharacterProgress);
 
   const textKey = Array.isArray(text) ? text.join('\u0000') : String(text ?? '');
   const textArray = useMemo(() => textKey.split('\u0000'), [textKey]);
@@ -176,6 +192,7 @@ const TextType: React.FC<TextTypeProps> = ({
   const chars = useMemo(() => graphemes(textArray[index] || ''), [textArray, index]);
   const total = chars.length;
   const shown = Math.min(count, total);
+  const start = reverseMode ? total - shown : 0;
   const minSpeed = variableSpeed?.min ?? typingSpeed;
   const maxSpeed = variableSpeed?.max ?? typingSpeed;
   const pace = (minSpeed + maxSpeed) / 2;
@@ -184,6 +201,10 @@ const TextType: React.FC<TextTypeProps> = ({
   useEffect(() => {
     onSentenceCompleteRef.current = onSentenceComplete;
   }, [onSentenceComplete]);
+
+  useEffect(() => {
+    onCharacterProgressRef.current = onCharacterProgress;
+  }, [onCharacterProgress]);
 
   useEffect(() => {
     const query = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -261,9 +282,55 @@ const TextType: React.FC<TextTypeProps> = ({
       blinkResume.current?.kill();
       gsap.to(blink, { opacity: 1, duration: 0.12, ease: 'power1.out' });
       blinkResume.current = gsap.delayedCall(0.12, () => timeline.restart());
+
+      if (containerRef.current) {
+        const contentSpan = containerRef.current.querySelector('.text-type__content') as HTMLElement | null;
+        let lineRects: TextLineRect[] = [];
+        if (contentSpan && shown > 0) {
+          const clientRects = contentSpan.getClientRects();
+          lineRects = Array.from(clientRects)
+            .map((r) => ({
+              x: Math.round(r.left),
+              y: Math.round(r.top),
+              width: Math.round(r.width),
+              height: Math.round(Math.max(r.height, 34)),
+            }))
+            .filter((r) => r.width > 0 && r.height > 0);
+
+          if (lineRects.length === 0 && caret) {
+            const containerRect = containerRef.current.getBoundingClientRect();
+            lineRects = [
+              {
+                x: Math.round(containerRect.left),
+                y: Math.round(containerRect.top),
+                width: Math.round(Math.max(16, caret.offsetLeft)),
+                height: Math.round(caret.offsetHeight || 36),
+              },
+            ];
+          }
+        }
+
+        onCharacterProgressRef.current?.({
+          charCount: shown,
+          totalChars: total,
+          currentText: chars.slice(start, start + shown).join(''),
+          lineRects,
+        });
+      }
     };
     placeCursor.current(false);
   });
+
+  useEffect(() => {
+    if (shown === 0) {
+      onCharacterProgressRef.current?.({
+        charCount: 0,
+        totalChars: total,
+        currentText: '',
+        lineRects: [],
+      });
+    }
+  }, [shown, total]);
 
   useEffect(() => {
     const node = containerRef.current;
@@ -373,7 +440,6 @@ const TextType: React.FC<TextTypeProps> = ({
     [typeEffect, reduceMotion]
   );
 
-  const start = reverseMode ? total - shown : 0;
   const marked = Math.min(selected, shown);
   const correct = chars.slice(start, start + shown).map((char, i) => {
     const isMarked = reverseMode ? i < marked : i >= shown - marked;

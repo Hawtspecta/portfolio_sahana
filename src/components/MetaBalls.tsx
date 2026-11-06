@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import './MetaBalls.css';
 
 export interface MetaBallsProps {
   className?: string;

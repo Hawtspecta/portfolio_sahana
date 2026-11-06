@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import './LetterGlitch.css';
 
 const DEFAULT_CHARACTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$&*()-_+=/[]{};:<>.,0123456789';
 const DEFAULT_FONT = "ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace";
@@ -977,8 +976,8 @@ const LetterGlitch: React.FC<LetterGlitchProps> = ({
   });
 
   return (
-    <div ref={containerRef} className={`letter-glitch${className ? ` ${className}` : ''}`} style={style} {...rest}>
-      <canvas ref={canvasRef} className="letter-glitch-canvas" aria-hidden="true" />
+    <div ref={containerRef} className={`relative w-full h-full overflow-hidden${className ? ` ${className}` : ''}`} style={style} {...rest}>
+      <canvas ref={canvasRef} className="absolute inset-0 block w-full h-full" aria-hidden="true" />
     </div>
   );
 };

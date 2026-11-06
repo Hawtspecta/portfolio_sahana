@@ -63,3 +63,15 @@ export function initGlobalLenis(): () => void {
   };
 }
 
+/**
+ * Lenis-inspired continuous rocket flight easing:
+ * S-curve with zero initial velocity and acceleration (effortless takeoff)
+ * and zero terminal velocity and acceleration (cushioned touchdown landing).
+ */
+export function lenisSmoothRocketEase(t: number): number {
+  const p = Math.max(0, Math.min(1, t));
+  return p < 0.5
+    ? 8 * p * p * p * p
+    : 1 - Math.pow(-2 * p + 2, 4) / 2;
+}
+

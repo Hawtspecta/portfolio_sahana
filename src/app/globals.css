@@ -95,26 +95,157 @@ body::-webkit-scrollbar,
   will-change: transform;
 }
 
-/* ─── Gentle floating wobble for the retro PC ─────────────────────── */
-@keyframes pcFloat {
+/* ─── Periodic Attention Wobble for the Retro PC (Starts immediately on enter, relaxed gap) ─── */
+@keyframes pcWobble {
   0% {
-    transform: translateY(0px) rotate(0deg);
+    transform: translateY(0px) rotate(0deg) scale(1);
+    filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.18)) drop-shadow(0 6px 10px rgba(0, 0, 0, 0.1));
   }
-  25% {
-    transform: translateY(-4px) rotate(0.3deg);
+  1.5% {
+    transform: translateY(-4px) rotate(-2deg) scale(1.02);
   }
-  50% {
-    transform: translateY(0px) rotate(0deg);
+  3% {
+    transform: translateY(-9px) rotate(3.5deg) scale(1.04);
+    filter: drop-shadow(0 28px 45px rgba(0, 0, 0, 0.35)) drop-shadow(0 12px 18px rgba(0, 0, 0, 0.22));
   }
-  75% {
-    transform: translateY(3px) rotate(-0.25deg);
+  4.5% {
+    transform: translateY(-3px) rotate(-3deg) scale(1.03);
+  }
+  6% {
+    transform: translateY(-6px) rotate(2.2deg) scale(1.022);
+  }
+  7.5% {
+    transform: translateY(-1.5px) rotate(-1.2deg) scale(1.012);
+  }
+  9% {
+    transform: translateY(-2px) rotate(0.6deg) scale(1.005);
+  }
+  11% {
+    transform: translateY(0px) rotate(0deg) scale(1);
+    filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.18)) drop-shadow(0 6px 10px rgba(0, 0, 0, 0.1));
   }
   100% {
-    transform: translateY(0px) rotate(0deg);
+    transform: translateY(0px) rotate(0deg) scale(1);
+    filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.18)) drop-shadow(0 6px 10px rgba(0, 0, 0, 0.1));
   }
 }
 
+.animate-pc-wobble,
 .animate-pc-float {
-  animation: pcFloat 4s ease-in-out infinite;
+  animation: pcWobble 10s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+  animation-delay: 0s;
+  transform-origin: center center;
+  will-change: transform, filter;
+}
+
+/* ─── Gradient ASCII Styles ──────────────────────────────────────── */
+.gradient-ascii-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.gradient-ascii-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ─── MetaBalls Styles ───────────────────────────────────────────── */
+.metaballs-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.metaballs-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ─── TextType Styles ────────────────────────────────────────────── */
+.text-type {
+  position: relative;
+  display: inline-block;
+  white-space: pre-wrap;
+}
+
+.text-type__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.text-type__char {
+  position: relative;
+}
+
+.text-type__char--selected {
+  background-color: color-mix(in srgb, currentColor 25%, transparent);
+}
+
+.text-type__caret {
+  display: inline-block;
+  width: 0;
+}
+
+.text-type__cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  white-space: pre;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
   will-change: transform;
 }
+
+.text-type__cursor--hidden {
+  opacity: 0;
+}
+
+.text-type__blink {
+  display: inline-block;
+}
+
+.text-type__cursor--character .text-type__blink {
+  margin-left: 0.25rem;
+}
+
+.text-type__shape {
+  display: inline-block;
+  margin-left: 0.06em;
+  background-color: currentColor;
+}
+
+.text-type__cursor--bar .text-type__shape {
+  width: max(2px, 0.07em);
+  height: 1.1em;
+  vertical-align: -0.2em;
+  border-radius: 1px;
+}
+
+.text-type__cursor--block .text-type__shape {
+  width: 0.56em;
+  height: 1.1em;
+  vertical-align: -0.2em;
+  border-radius: 0.06em;
+}
+
+.text-type__cursor--underscore .text-type__shape {
+  width: 0.56em;
+  height: max(2px, 0.075em);
+  vertical-align: -0.12em;
+  border-radius: 1px;
+}
+
+

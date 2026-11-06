@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import './GradientASCII.css';
 
 export interface GradientASCIIProps extends React.HTMLAttributes<HTMLDivElement> {
   colors?: string[];
