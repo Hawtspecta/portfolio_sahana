@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import TextType from "@/components/TextType";
 import LetterGlitch from "@/components/LetterGlitch";
-import FlexCarousel from "@/components/FlexCarousel";
+import FlexCarousel, { FlexCarouselHandle } from "@/components/FlexCarousel";
 import ScrollExpand, { ScrollExpandHandle } from "@/components/ScrollExpand";
 import MagicBento from "@/components/MagicBento";
 import { getMagicBentoItems } from "@/data/projectData";
@@ -82,50 +82,21 @@ export default function PortfolioSection({
   onScrollBackToTransition,
   onExpandedStateChange,
 }: PortfolioSectionProps) {
-  const savedState = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const raw =
-        sessionStorage.getItem("portfolio_saved_state") ||
-        localStorage.getItem("portfolio_saved_state");
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  }, []);
-
   const [isHovered, setIsHovered] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 });
   const [entered, setEntered] = useState(false);
-  const [isVideoPlaying, setIsVideoPlaying] = useState(() => !!savedState?.isVideoPlaying);
-  const [selectedProject, setSelectedProject] = useState<typeof PROJECT_ITEMS[0] | null>(() => {
-    if (savedState?.expandedProjectTitle) {
-      const found = PROJECT_ITEMS.find((p) => p.title === savedState.expandedProjectTitle);
-      return found || null;
-    }
-    return null;
-  });
-  const [currentTab, setCurrentTab] = useState(() => {
-    if (savedState?.expandedProjectTitle) {
-      const idx = PROJECT_ITEMS.findIndex((p) => p.title === savedState.expandedProjectTitle);
-      return idx >= 0 ? idx : 0;
-    }
-    return 0;
-  });
-  // Only restore full live site expansion across browser reloads if BOTH an expanded project and live expansion were saved
-  const isReloadExpanded = !!(
-    savedState?.expandedProjectTitle && savedState?.isLiveExpanded
-  );
-  const [expandProgress, setExpandProgress] = useState(isReloadExpanded ? 1 : 0);
-  const initialExpandedRef = useRef(isReloadExpanded);
-
-  // Clear initialExpandedRef immediately after initial mount restoration
-  // so any subsequent user clicks on a project tab ALWAYS open unexpanded in card view!
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<typeof PROJECT_ITEMS[0] | null>(null);
+  const [currentTab, setCurrentTab] = useState(0);
+  const [expandProgress, setExpandProgress] = useState(0);
+  const initialExpandedRef = useRef(false);
+  const [isInfoOpen, setIsInfoOpen] = useState(false);
+  const isInfoOpenRef = useRef(false);
   useEffect(() => {
-    initialExpandedRef.current = false;
-  }, []);
-  const [isInfoOpen, setIsInfoOpen] = useState(() => !!savedState?.isInfoOpen);
+    isInfoOpenRef.current = isInfoOpen;
+  }, [isInfoOpen]);
   const scrollExpandRef = useRef<ScrollExpandHandle>(null);
+  const carouselRef = useRef<FlexCarouselHandle>(null);
   const [prevActive, setPrevActive] = useState(isActive);
 
   const hitRef = useRef<HTMLDivElement>(null);
@@ -134,16 +105,51 @@ export default function PortfolioSection({
 
   // Vertical scroll state: 0 = at PC (About Me), 1 = at Creations (MY CREATIONS.EXE)
   const [scrollPos, setScrollPos] = useState(() => {
-    if (savedState?.expandedProjectTitle) {
-      return 1;
-    }
     if (externalScrollProgress != null) {
       return externalScrollProgress >= 0.5 ? 1 : 0;
     }
     return 0;
   });
   const scrollPosRef = useRef(scrollPos);
-  scrollPosRef.current = scrollPos;
+  useEffect(() => {
+    scrollPosRef.current = scrollPos;
+  }, [scrollPos]);
+
+  // Restore saved project viewer state on mount (runs exclusively on client, preventing hydration mismatch)
+  useEffect(() => {
+    try {
+      const raw =
+        sessionStorage.getItem("portfolio_saved_state") ||
+        localStorage.getItem("portfolio_saved_state");
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (!saved) return;
+
+      if (saved.expandedProjectTitle) {
+        const found = PROJECT_ITEMS.find((p) => p.title === saved.expandedProjectTitle);
+        if (found) {
+          setSelectedProject(found);
+          const idx = PROJECT_ITEMS.findIndex((p) => p.title === saved.expandedProjectTitle);
+          if (idx >= 0) setCurrentTab(idx);
+          if (saved.isLiveExpanded) {
+            initialExpandedRef.current = true;
+            setExpandProgress(1);
+          }
+          if (saved.isInfoOpen) {
+            setIsInfoOpen(true);
+          }
+          setScrollPos(1);
+          scrollPosRef.current = 1;
+        }
+      } else if (saved.section === "projects") {
+        setScrollPos(1);
+        scrollPosRef.current = 1;
+      }
+      if (saved.isVideoPlaying) {
+        setIsVideoPlaying(true);
+      }
+    } catch { }
+  }, []);
   const [resistanceOffset, setResistanceOffset] = useState(0);
   const arrivalLockUntilRef = useRef(0);
   const aboutArrivalCooldownUntilRef = useRef(0);
@@ -153,21 +159,6 @@ export default function PortfolioSection({
   const scrollUpAccumulatorRef = useRef(0);
   const scrollUpResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Compulsory stop at About:
-  // isSettlingFromCreationsRef is ONLY true while momentum from Creations -> About is decelerating,
-  // absorbing the inertia of that swipe so it compulsorily stops at About.
-  const isSettlingFromCreationsRef = useRef(false);
-  const aboutArrivedTimeRef = useRef(0);
-  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const swallowCreationsInertia = useCallback(() => {
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-    }
-    silenceTimerRef.current = setTimeout(() => {
-      isSettlingFromCreationsRef.current = false;
-    }, 220);
-  }, []);
 
   const onPortfolioProgressChangeRef = useRef(onPortfolioProgressChange);
   useEffect(() => {
@@ -226,43 +217,35 @@ export default function PortfolioSection({
       }
       if (nextPos === 1) {
         hasStoppedAtAboutRef.current = true;
-        isSettlingFromCreationsRef.current = false;
       }
       setScrollPos(nextPos);
     }
   }
 
   const updateScrollPos = useCallback((newPos: number) => {
+    scrollPosRef.current = newPos;
     if (newPos === 1) {
       arrivalLockUntilRef.current = Date.now() + 600;
-      isSettlingFromCreationsRef.current = false;
     }
     setScrollPos(newPos);
     onPortfolioProgressChangeRef.current?.(newPos);
   }, []);
 
   // Centralized upward transition: Creations (MY CREATIONS.EXE) -> About (WHO'S BEHIND THE SCREEN?)
-  // Compulsorily stops at About and absorbs all inertial momentum from the upward swipe
+  // Compulsorily stops at About and absorbs the remaining swipe inertia for 400ms
   const handleScrollUpToAbout = useCallback(() => {
-    // If already at About, keep swallowing residual inertial events from the swipe
     if (scrollPosRef.current === 0) {
-      if (isSettlingFromCreationsRef.current) {
-        swallowCreationsInertia();
-      }
       return;
     }
 
     // Switch to About section (Section 0)
     updateScrollPos(0);
-    // Compulsorily stop at About: absorb the inertia of this specific swipe from Creations
-    isSettlingFromCreationsRef.current = true;
-    aboutArrivedTimeRef.current = Date.now();
-    aboutArrivalCooldownUntilRef.current = Date.now() + 650;
+    // Compulsorily stop at About: absorb any residual momentum of this swipe for 400ms
+    aboutArrivalCooldownUntilRef.current = Date.now() + 400;
     scrollDownAccumulatorRef.current = 0;
     scrollUpAccumulatorRef.current = 0;
     setResistanceOffset(0);
-    swallowCreationsInertia();
-  }, [updateScrollPos, swallowCreationsInertia]);
+  }, [updateScrollPos]);
 
   // Restart starting wobble and reset section states whenever active state changes
   if (isActive !== prevActive) {
@@ -273,21 +256,15 @@ export default function PortfolioSection({
       if (externalScrollProgress == null) {
         setScrollPos(0);
       }
-      // Cushion and absorb all incoming scroll momentum for 600ms
-      aboutArrivalCooldownUntilRef.current = Date.now() + 600;
+      // Cushion and absorb all incoming scroll momentum for 400ms
+      aboutArrivalCooldownUntilRef.current = Date.now() + 400;
       scrollDownAccumulatorRef.current = 0;
       setResistanceOffset(0);
-      isSettlingFromCreationsRef.current = false;
     } else {
       setEntered(false);
       setIsHovered(false);
       setIsVideoPlaying(false);
       setScrollPos(0);
-      isSettlingFromCreationsRef.current = false;
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = null;
-      }
     }
   }
 
@@ -317,10 +294,6 @@ export default function PortfolioSection({
       if (scrollUpResetTimeoutRef.current) {
         clearTimeout(scrollUpResetTimeoutRef.current);
         scrollUpResetTimeoutRef.current = null;
-      }
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = null;
       }
     };
   }, [isActive]);
@@ -368,12 +341,14 @@ export default function PortfolioSection({
     initialExpandedRef.current = false;
     setExpandProgress(0);
     setIsInfoOpen(false);
+    isInfoOpenRef.current = false;
     setSelectedProject(project);
   }, []);
 
   // Close project viewer and restore carousel/screen state
   const handleCloseProject = useCallback(() => {
     setIsInfoOpen(false);
+    isInfoOpenRef.current = false;
     setSelectedProject(null);
     setExpandProgress(0);
     initialExpandedRef.current = false;
@@ -408,11 +383,16 @@ export default function PortfolioSection({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (isInfoOpen) {
+        if (isInfoOpenRef.current) {
           setIsInfoOpen(false);
+          isInfoOpenRef.current = false;
           return;
         }
         if (selectedProject) {
+          if (expandProgress >= 0.5) {
+            scrollExpandRef.current?.scrollToTop();
+            return;
+          }
           handleCloseProject();
           return;
         }
@@ -436,17 +416,17 @@ export default function PortfolioSection({
         if (scrollPos === 1) {
           handleScrollUpToAbout();
         } else if (scrollPos === 0) {
-            if (Date.now() < aboutArrivalCooldownUntilRef.current || isSettlingFromCreationsRef.current) {
-              return;
-            }
-            onScrollBackToTransitionRef.current?.();
+          if (Date.now() < aboutArrivalCooldownUntilRef.current) {
+            return;
           }
+          onScrollBackToTransitionRef.current?.();
         }
-      };
+      }
+    };
 
-      window.addEventListener("keydown", handleKeyDown);
-      return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isActive, isVideoPlaying, selectedProject, scrollPos, updateScrollPos, handleScrollUpToAbout, handleCloseVideo, handleCloseProject]);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isActive, isVideoPlaying, selectedProject, expandProgress, isInfoOpen, scrollPos, updateScrollPos, handleScrollUpToAbout, handleCloseVideo, handleCloseProject]);
 
   // Wheel listener: smooth natural scroll between About and Creations
   const handleWheel = useCallback(
@@ -505,45 +485,46 @@ export default function PortfolioSection({
           e.stopPropagation();
           scrollDownAccumulatorRef.current = 0;
 
-            // 1. Initial arrival cooldown (compulsory stop at About section, exactly like scrolling down from transition):
-            // Absorb all incoming upward momentum from the swipe so user compulsorily stops at About!
-            if (Date.now() < aboutArrivalCooldownUntilRef.current) {
-              if (isSettlingFromCreationsRef.current) {
-                swallowCreationsInertia();
-              }
-              const tension = Math.min(18, Math.abs(e.deltaY) * 0.05);
-              setResistanceOffset(-tension);
-              if (scrollUpResetTimeoutRef.current) clearTimeout(scrollUpResetTimeoutRef.current);
-              scrollUpResetTimeoutRef.current = setTimeout(() => {
-                setResistanceOffset(0);
-              }, 300);
-              return;
-            }
+          // 1. Initial arrival cooldown:
+          // Absorb all incoming upward momentum from the swipe so user compulsorily stops at About
+          if (Date.now() < aboutArrivalCooldownUntilRef.current) {
+            const tension = Math.min(18, Math.abs(e.deltaY) * 0.05);
+            setResistanceOffset(-tension);
+            if (scrollUpResetTimeoutRef.current) clearTimeout(scrollUpResetTimeoutRef.current);
+            scrollUpResetTimeoutRef.current = setTimeout(() => {
+              setResistanceOffset(0);
+            }, 300);
+            return;
+          }
 
-            if (isSettlingFromCreationsRef.current) {
-              swallowCreationsInertia();
-              return;
-            }
-
-              // At About: next scroll up returns to transition frames (zero resistance)!
-              if (e.deltaY < -3) {
-                scrollUpAccumulatorRef.current = 0;
-                setResistanceOffset(0);
-                onScrollBackToTransitionRef.current?.();
-              }
-            }
-          } else {
-            // In Creations section (MY CREATIONS.EXE): scroll up returns to About section COMPULSORILY
-            e.stopPropagation();
-            scrollDownAccumulatorRef.current = 0;
+          // At About: next scroll up returns to transition frames on the very first scroll!
+          if (e.deltaY < -3) {
             scrollUpAccumulatorRef.current = 0;
             setResistanceOffset(0);
-            if (e.deltaY < -8) {
-              handleScrollUpToAbout();
-            }
+            onScrollBackToTransitionRef.current?.();
           }
-        },
-        [isActive, isVideoPlaying, selectedProject, scrollPos, updateScrollPos, handleScrollUpToAbout, swallowCreationsInertia]
+        }
+      } else {
+        // In Creations section (MY CREATIONS.EXE):
+        // Allow wheel anywhere on screen (including the brown horizon desk bar and margins)
+        // to naturally step through project tabs, and return to About only when scrolling up from Tab 0.
+        e.stopPropagation();
+        scrollDownAccumulatorRef.current = 0;
+        scrollUpAccumulatorRef.current = 0;
+        setResistanceOffset(0);
+
+        if (Date.now() < arrivalLockUntilRef.current) {
+          return;
+        }
+
+        if (carouselRef.current) {
+          carouselRef.current.handleWheel(e);
+        } else if (e.deltaY < -8) {
+          handleScrollUpToAbout();
+        }
+      }
+    },
+    [isActive, isVideoPlaying, selectedProject, scrollPos, updateScrollPos, handleScrollUpToAbout]
   );
 
   // Hardware-accelerated CSS radial mask: creates a soft, organic clearing in the green matrix glitch around About Me text
@@ -566,8 +547,8 @@ export default function PortfolioSection({
   return (
     <div
       className={`fixed inset-0 z-[51] w-full h-full overflow-hidden select-none transition-opacity duration-500 ease-out ${isActive
-          ? "opacity-100 pointer-events-auto visible"
-          : "opacity-0 pointer-events-none invisible"
+        ? "opacity-100 pointer-events-auto visible"
+        : "opacity-0 pointer-events-none invisible"
         }`}
       onWheel={isActive ? handleWheel : undefined}
     >
@@ -708,272 +689,303 @@ export default function PortfolioSection({
           {/* ═══════════════════════════════════════════════════════════════ */}
           {/* SECTION 2: MY CREATIONS.EXE (Directly below Section 1)          */}
           {/* ═══════════════════════════════════════════════════════════════ */}
-          <div className={`relative w-full h-full overflow-hidden flex flex-col items-center justify-start pt-6 sm:pt-8 md:pt-10 pb-2 px-4 sm:px-8 ${isActive && scrollPos === 1 ? "pointer-events-auto" : "pointer-events-none"}`}>
+            <div className={`relative w-full h-full overflow-hidden flex flex-col items-center justify-start pt-10 sm:pt-14 md:pt-16 lg:pt-20 pb-2 px-4 sm:px-8 ${isActive && scrollPos === 1 ? "pointer-events-auto" : "pointer-events-none"}`}>
 
-            {/* Heading: MY CREATIONS.EXE (Left-aligned with tabs/ribbons, tight gap below) */}
-            <div className="relative z-10 w-[78vw] max-w-[1460px] mx-auto flex flex-col items-start justify-start text-left mt-0 mb-0">
-              <h2
-                className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-neutral-900 drop-shadow-sm mb-1"
-                style={{ fontFamily: "'Special Elite', cursive" }}
-              >
-                MY CREATIONS.EXE
-              </h2>
-              <p
-                className="text-xs sm:text-sm text-neutral-800/80 font-mono tracking-wide"
-                style={{ fontFamily: "'Special Elite', cursive" }}
-              >
-                Explore projects in horizontal liquid view &bull; Click to expand
-              </p>
-            </div>
+              {/* Heading: MY CREATIONS.EXE (Left-aligned with tabs/ribbons, tight gap below) */}
+              <div className="relative z-10 w-[78vw] max-w-[1460px] mx-auto flex flex-col items-start justify-start text-left mt-0 mb-0">
+                <h2
+                  className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-neutral-900 drop-shadow-sm mb-1"
+                  style={{ fontFamily: "'Special Elite', cursive" }}
+                >
+                  MY CREATIONS.EXE
+                </h2>
+                <p
+                  className="text-xs sm:text-sm text-neutral-800/80 font-mono tracking-wide"
+                  style={{ fontFamily: "'Special Elite', cursive" }}
+                >
+                  Explore projects in horizontal liquid view &bull; Click to expand
+                </p>
+              </div>
 
-            {/* FlexCarousel with 5 tabs (Exact width between ribbons, large tabs, cloud blur at disappearing ends) */}
-            <div className="relative z-10 w-full flex items-center justify-center -mt-16 sm:-mt-20 md:-mt-24">
-              <div
-                className="w-[82vw] max-w-[1520px] h-[540px] sm:h-[580px] lg:h-[620px] relative mx-auto overflow-hidden"
-                onWheel={(e) => {
-                  e.stopPropagation();
-                  if (Date.now() < arrivalLockUntilRef.current) {
-                    e.preventDefault();
-                  }
-                }}
-              >
-                {/* Left Side Blur - Only visible when not on first tab, smoothly merges into background */}
+              {/* FlexCarousel with 5 tabs (Exact width between ribbons, large tabs, cloud blur at disappearing ends) */}
+              <div className="relative z-10 w-full flex items-center justify-center -mt-16 sm:-mt-20 md:-mt-24">
                 <div
-                  className={`absolute left-0 top-1/2 -translate-y-1/2 h-[58%] w-10 sm:w-12 md:w-14 z-20 pointer-events-none select-none rounded-r-xl transition-opacity duration-300 ${currentTab > 0 ? "opacity-100" : "opacity-0"
-                    }`}
-                  style={{
-                    backdropFilter: "blur(10px)",
-                    WebkitBackdropFilter: "blur(10px)",
-                    maskImage:
-                      "linear-gradient(to right, black 0%, rgba(0,0,0,0.5) 60%, transparent 100%)",
-                    WebkitMaskImage:
-                      "linear-gradient(to right, black 0%, rgba(0,0,0,0.5) 60%, transparent 100%)",
-                  }}
-                />
-
-                {/* Right Side Blur - Only visible when not on last tab, smoothly merges into background */}
-                <div
-                  className={`absolute right-0 top-1/2 -translate-y-1/2 h-[58%] w-10 sm:w-12 md:w-14 z-20 pointer-events-none select-none rounded-l-xl transition-opacity duration-300 ${currentTab < PROJECT_ITEMS.length - 1 ? "opacity-100" : "opacity-0"
-                    }`}
-                  style={{
-                    backdropFilter: "blur(10px)",
-                    WebkitBackdropFilter: "blur(10px)",
-                    maskImage:
-                      "linear-gradient(to left, black 0%, rgba(0,0,0,0.5) 60%, transparent 100%)",
-                    WebkitMaskImage:
-                      "linear-gradient(to left, black 0%, rgba(0,0,0,0.5) 60%, transparent 100%)",
-                  }}
-                />
-
-                <div
-                  className="w-full h-full"
-                  style={{
-                    maskImage:
-                      currentTab > 0 && currentTab < PROJECT_ITEMS.length - 1
-                        ? "linear-gradient(to right, transparent 0%, black 48px, black calc(100% - 48px), transparent 100%)"
-                        : currentTab > 0
-                          ? "linear-gradient(to right, transparent 0%, black 48px, black 100%)"
-                          : currentTab < PROJECT_ITEMS.length - 1
-                            ? "linear-gradient(to right, black 0%, black calc(100% - 48px), transparent 100%)"
-                            : "none",
-                    WebkitMaskImage:
-                      currentTab > 0 && currentTab < PROJECT_ITEMS.length - 1
-                        ? "linear-gradient(to right, transparent 0%, black 48px, black calc(100% - 48px), transparent 100%)"
-                        : currentTab > 0
-                          ? "linear-gradient(to right, transparent 0%, black 48px, black 100%)"
-                          : currentTab < PROJECT_ITEMS.length - 1
-                            ? "linear-gradient(to right, black 0%, black calc(100% - 48px), transparent 100%)"
-                            : "none",
-                    transition: "mask-image 0.3s ease, -webkit-mask-image 0.3s ease",
+                  className="w-[82vw] max-w-[1520px] h-[540px] sm:h-[580px] lg:h-[620px] relative mx-auto overflow-hidden"
+                  onWheel={(e) => {
+                    e.stopPropagation();
+                    if (Date.now() < arrivalLockUntilRef.current) {
+                      e.preventDefault();
+                    }
                   }}
                 >
-                  <FlexCarousel
-                    items={PROJECT_ITEMS}
-                    preset="liquid"
-                    intro="none"
-                    cardHeight={0.58}
-                    gap={14}
-                    squeeze={0}
-                    focusOnClick={false}
-                    captions
-                    tilt={-180}
-                    bend={0}
-                    liquid={0}
-                    onChange={(idx) => setCurrentTab(idx)}
-                    onSelect={(idx) => handleSelectProject(PROJECT_ITEMS[idx])}
-                    onScrollPrev={handleScrollUpToAbout}
+                  {/* Left Side Blur - Only visible when not on first tab, smoothly merges into background */}
+                  <div
+                    className={`absolute left-0 top-1/2 -translate-y-1/2 h-[58%] w-10 sm:w-12 md:w-14 z-20 pointer-events-none select-none rounded-r-xl transition-opacity duration-300 ${currentTab > 0 ? "opacity-100" : "opacity-0"
+                      }`}
+                    style={{
+                      backdropFilter: "blur(10px)",
+                      WebkitBackdropFilter: "blur(10px)",
+                      maskImage:
+                        "linear-gradient(to right, black 0%, rgba(0,0,0,0.5) 60%, transparent 100%)",
+                      WebkitMaskImage:
+                        "linear-gradient(to right, black 0%, rgba(0,0,0,0.5) 60%, transparent 100%)",
+                    }}
                   />
+
+                  {/* Right Side Blur - Only visible when not on last tab, smoothly merges into background */}
+                  <div
+                    className={`absolute right-0 top-1/2 -translate-y-1/2 h-[58%] w-10 sm:w-12 md:w-14 z-20 pointer-events-none select-none rounded-l-xl transition-opacity duration-300 ${currentTab < PROJECT_ITEMS.length - 1 ? "opacity-100" : "opacity-0"
+                      }`}
+                    style={{
+                      backdropFilter: "blur(10px)",
+                      WebkitBackdropFilter: "blur(10px)",
+                      maskImage:
+                        "linear-gradient(to left, black 0%, rgba(0,0,0,0.5) 60%, transparent 100%)",
+                      WebkitMaskImage:
+                        "linear-gradient(to left, black 0%, rgba(0,0,0,0.5) 60%, transparent 100%)",
+                    }}
+                  />
+
+                  <div
+                    className="w-full h-full"
+                    style={{
+                      maskImage:
+                        currentTab > 0 && currentTab < PROJECT_ITEMS.length - 1
+                          ? "linear-gradient(to right, transparent 0%, black 48px, black calc(100% - 48px), transparent 100%)"
+                          : currentTab > 0
+                            ? "linear-gradient(to right, transparent 0%, black 48px, black 100%)"
+                            : currentTab < PROJECT_ITEMS.length - 1
+                              ? "linear-gradient(to right, black 0%, black calc(100% - 48px), transparent 100%)"
+                              : "none",
+                      WebkitMaskImage:
+                        currentTab > 0 && currentTab < PROJECT_ITEMS.length - 1
+                          ? "linear-gradient(to right, transparent 0%, black 48px, black calc(100% - 48px), transparent 100%)"
+                          : currentTab > 0
+                            ? "linear-gradient(to right, transparent 0%, black 48px, black 100%)"
+                            : currentTab < PROJECT_ITEMS.length - 1
+                              ? "linear-gradient(to right, black 0%, black calc(100% - 48px), transparent 100%)"
+                              : "none",
+                      transition: "mask-image 0.3s ease, -webkit-mask-image 0.3s ease",
+                    }}
+                  >
+                    <FlexCarousel
+                      ref={carouselRef}
+                      items={PROJECT_ITEMS}
+                      preset="liquid"
+                      intro="none"
+                      cardHeight={0.58}
+                      gap={14}
+                      squeeze={0}
+                      focusOnClick={false}
+                      captions
+                      tilt={-180}
+                      bend={0}
+                      liquid={0}
+                      onChange={(idx) => setCurrentTab(idx)}
+                      onSelect={(idx) => handleSelectProject(PROJECT_ITEMS[idx])}
+                      onScrollPrev={handleScrollUpToAbout}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Bottom Footer hint — placed safely above the horizon */}
-            <div className="relative z-10 text-center pb-2 mt-auto">
-              <span
-                className="text-xs text-neutral-700/60 font-mono tracking-widest uppercase"
-                style={{ fontFamily: "'Special Elite', cursive" }}
-              >
-                5 TABS LOADED
-              </span>
+              {/* Bottom Footer hint — placed safely above the horizon */}
+              <div className="relative z-10 text-center pb-2 mt-auto">
+                <span
+                  className="text-xs text-neutral-700/60 font-mono tracking-widest uppercase"
+                  style={{ fontFamily: "'Special Elite', cursive" }}
+                >
+                  5 TABS LOADED
+                </span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* ─── FOREGROUND HORIZON DESK BAR (Bottom 8%) ─── */}
-      {/* Physically anchors the desk horizon at the bottom; content scrolls strictly above it */}
-      <div className="absolute bottom-0 left-0 right-0 h-[8%] z-20 pointer-events-none select-none overflow-hidden">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/assets/transition/bg_port.webp"
-          alt=""
-          draggable={false}
-          className="absolute bottom-0 left-0 w-full select-none pointer-events-none"
-          style={{ height: "1250%", objectFit: "fill" }}
-        />
-      </div>
+        {/* ─── FOREGROUND HORIZON DESK BAR (Bottom 8%) ─── */}
+        {/* Physically anchors the desk horizon at the bottom; content scrolls strictly above it */}
+        <div className="absolute bottom-0 left-0 right-0 h-[8%] z-20 pointer-events-none select-none overflow-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/assets/transition/bg_port.webp"
+            alt=""
+            draggable={false}
+            className="absolute bottom-0 left-0 w-full select-none pointer-events-none"
+            style={{ height: "1250%", objectFit: "fill" }}
+          />
+        </div>
 
-      {/* Fullscreen Stretched PC Video Modal View */}
-      <div
-        className={`fixed inset-0 z-[60] w-full h-full overflow-hidden transition-opacity duration-300 ease-out ${showVideo ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-          }`}
-      >
-        <video
-          ref={videoRef}
-          src="/assets/transition/pc_click.mp4"
-          preload="auto"
-          playsInline
-          className="absolute inset-0 w-full h-full select-none render-high-quality"
-          style={{ objectFit: "fill" }}
-          onEnded={handleCloseVideo}
-        />
-
-        {/* Close Button */}
-        <button
-          type="button"
-          onClick={handleCloseVideo}
-          className="absolute top-5 right-5 sm:top-7 sm:right-7 z-20 flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-black/60 hover:bg-black/85 text-white/90 hover:text-white backdrop-blur-md transition-all duration-200 hover:scale-110 active:scale-95 shadow-2xl border border-white/20 cursor-pointer group"
-          aria-label="Close view"
-          title="Close (Esc)"
+        {/* Fullscreen Stretched PC Video Modal View */}
+        <div
+          className={`fixed inset-0 z-[60] w-full h-full overflow-hidden transition-opacity duration-300 ease-out ${showVideo ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+            }`}
         >
-          <svg
-            width="22"
-            height="22"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="transition-transform duration-200 group-hover:rotate-90"
+          <video
+            ref={videoRef}
+            src="/assets/transition/pc_click.mp4"
+            preload="auto"
+            playsInline
+            className="absolute inset-0 w-full h-full select-none render-high-quality"
+            style={{ objectFit: "fill" }}
+            onEnded={handleCloseVideo}
+          />
+
+          {/* Close Button */}
+          <button
+            type="button"
+            onClick={handleCloseVideo}
+            className="absolute top-5 right-5 sm:top-7 sm:right-7 z-20 flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-black/60 hover:bg-black/85 text-white/90 hover:text-white backdrop-blur-md transition-all duration-200 hover:scale-110 active:scale-95 shadow-2xl border border-white/20 cursor-pointer group"
+            aria-label="Close view"
+            title="Close (Esc)"
           >
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Fullscreen ScrollExpand Modal View for Clicked Project Tab */}
-      <div
-        data-project-expanded={selectedProject && expandProgress >= 0.95 ? "true" : undefined}
-        className={`fixed inset-0 z-[70] w-full h-full overflow-hidden bg-black/75 backdrop-blur-md transition-opacity duration-300 ease-out flex flex-col items-center justify-center ${selectedProject ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-          }`}
-        onWheel={(e) => e.stopPropagation()}
-      >
-        {selectedProject && (
-          <>
-            {/* Close Button — Hidden when project is expanded into live site */}
-            <button
-              type="button"
-              onClick={handleCloseProject}
-              className={`absolute top-5 right-5 sm:top-7 sm:right-7 z-50 flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-white/10 hover:bg-white/20 text-white/90 hover:text-white backdrop-blur-md transition-all duration-300 hover:scale-110 active:scale-95 shadow-2xl border border-white/20 cursor-pointer group ${expandProgress >= 0.95
-                ? "opacity-0 pointer-events-none scale-75"
-                : "opacity-100 pointer-events-auto scale-100"
-                }`}
-              aria-label="Close project view"
-              title="Close (Esc)"
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="transition-transform duration-200 group-hover:rotate-90"
             >
-              <svg
-                width="22"
-                height="22"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="transition-transform duration-200 group-hover:rotate-90"
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Fullscreen ScrollExpand Modal View for Clicked Project Tab */}
+        <div
+          data-project-expanded={selectedProject && expandProgress >= 0.95 ? "true" : undefined}
+          className={`fixed inset-0 z-[70] w-full h-full overflow-hidden bg-black/75 backdrop-blur-md transition-opacity duration-300 ease-out flex flex-col items-center justify-center ${selectedProject ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+            }`}
+          onWheel={(e) => e.stopPropagation()}
+        >
+          {selectedProject && (
+            <>
+              {/* Close Button — Hidden when project is expanded into live site */}
+              <button
+                type="button"
+                onClick={handleCloseProject}
+                className={`absolute top-5 right-5 sm:top-7 sm:right-7 z-50 flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-white/10 hover:bg-white/20 text-white/90 hover:text-white backdrop-blur-md transition-all duration-300 hover:scale-110 active:scale-95 shadow-2xl border border-white/20 cursor-pointer group ${expandProgress >= 0.95
+                  ? "opacity-0 pointer-events-none scale-75"
+                  : "opacity-100 pointer-events-auto scale-100"
+                  }`}
+                aria-label="Close project view"
+                title="Close (Esc)"
               >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-
-            {/* ScrollExpand Component — Expands the image inside the tab */}
-            <div className="w-full h-full relative">
-              <ScrollExpand
-                ref={scrollExpandRef}
-                src={selectedProject.expandSrc || "/assets/transition/ezgif-frame-106.webp"}
-                alt={selectedProject.alt}
-                scrollHint="Scroll to explore live site"
-                startWidth={48}
-                startHeight={60}
-                startRadius={20}
-                endRadius={0}
-                mediaZoom={1.25}
-                scrollDistance={1.4}
-                holdDistance={0.4}
-                smoothing={0.12}
-                useWindowScroll={false}
-                initialExpanded={initialExpandedRef.current}
-                onProgress={setExpandProgress}
-              />
-
-              {/* Fully Expanded Live Interactive Iframe */}
-              {selectedProject.demoUrl && (
-                <div
-                  className={`absolute inset-0 z-20 w-full h-full transition-opacity duration-500 flex flex-col ${expandProgress >= 0.95
-                    ? "opacity-100 pointer-events-auto"
-                    : "opacity-0 pointer-events-none"
-                    }`}
-                  onWheel={(e) => {
-                    // When info tab is opened, NEVER zoom out or scroll back — only Esc or Close button
-                    if (isInfoOpen) {
-                      e.stopPropagation();
-                      return;
-                    }
-                    // When user scrolls back up (deltaY < 0), zoom out the iframe back to card!
-                    if (e.deltaY < -15) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      scrollExpandRef.current?.scrollToTop();
-                    }
-                  }}
+                <svg
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="transition-transform duration-200 group-hover:rotate-90"
                 >
-                  {/* Top Bar with Live Project Header & Direct Zoom Out Button */}
-                  <div className="relative z-30 flex items-center justify-between px-6 py-3 bg-neutral-950/80 backdrop-blur-md border-b border-white/10 select-none">
-                    <div className="flex items-center gap-3">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <span className="text-sm font-semibold tracking-wider text-white font-mono uppercase">
-                        {selectedProject.title}
-                      </span>
-                      <span className="text-xs text-white/50 font-mono hidden sm:inline">
-                        &bull; {selectedProject.subtitle}
-                      </span>
-                    </div>
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
 
-                    <div className="flex items-center gap-2.5 sm:gap-3">
-                      {/* Info / Dossier Button (? or i) */}
-                      <button
-                        type="button"
-                        onClick={() => setIsInfoOpen((prev) => !prev)}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs sm:text-sm font-mono font-medium tracking-wide border transition-all duration-200 cursor-pointer shadow-lg hover:scale-105 active:scale-95 ${isInfoOpen
-                          ? "bg-emerald-500/30 text-emerald-300 border-emerald-400/60 shadow-emerald-500/20"
-                          : "bg-white/10 hover:bg-white/25 text-white/90 hover:text-white border-white/20 hover:border-white/40 shadow-white/10"
-                          }`}
-                        title={isInfoOpen ? "Close info & return to live site" : "View Project Overview, Features & Tech Stack"}
-                      >
-                        {isInfoOpen ? (
+              {/* ScrollExpand Component — Expands the image inside the tab */}
+              <div className="w-full h-full relative">
+                <ScrollExpand
+                  ref={scrollExpandRef}
+                  src={selectedProject.expandSrc || "/assets/transition/ezgif-frame-106.webp"}
+                  alt={selectedProject.alt}
+                  scrollHint="Scroll to explore live site"
+                  startWidth={48}
+                  startHeight={60}
+                  startRadius={20}
+                  endRadius={0}
+                  mediaZoom={1.25}
+                  scrollDistance={1.4}
+                  holdDistance={0.4}
+                  smoothing={0.12}
+                  useWindowScroll={false}
+                  initialExpanded={initialExpandedRef.current}
+                  onProgress={setExpandProgress}
+                />
+
+                {/* Fully Expanded Live Interactive Iframe */}
+                {selectedProject.demoUrl && (
+                  <div
+                    className={`absolute inset-0 z-20 w-full h-full transition-opacity duration-500 flex flex-col ${expandProgress >= 0.95
+                      ? "opacity-100 pointer-events-auto"
+                      : "opacity-0 pointer-events-none"
+                      }`}
+                    onWheel={(e) => {
+                      // When info tab is opened, NEVER zoom out or scroll back — only Esc or Close button
+                      if (isInfoOpen) {
+                        e.stopPropagation();
+                        return;
+                      }
+                      // When user scrolls back up (deltaY < 0), zoom out the iframe back to card!
+                      if (e.deltaY < -15) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        scrollExpandRef.current?.scrollToTop();
+                      }
+                    }}
+                  >
+                    {/* Top Bar with Live Project Header & Direct Zoom Out Button */}
+                    <div className="relative z-30 flex items-center justify-between px-6 py-3 bg-neutral-950/80 backdrop-blur-md border-b border-white/10 select-none">
+                      <div className="flex items-center gap-3">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="text-sm font-semibold tracking-wider text-white font-mono uppercase">
+                          {selectedProject.title}
+                        </span>
+                        <span className="text-xs text-white/50 font-mono hidden sm:inline">
+                          &bull; {selectedProject.subtitle}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2.5 sm:gap-3">
+                        {/* Info / Dossier Button (? or i) */}
+                        <button
+                          type="button"
+                          onClick={() => setIsInfoOpen((prev) => !prev)}
+                          className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs sm:text-sm font-mono font-medium tracking-wide border transition-all duration-200 cursor-pointer shadow-lg hover:scale-105 active:scale-95 ${isInfoOpen
+                            ? "bg-emerald-500/30 text-emerald-300 border-emerald-400/60 shadow-emerald-500/20"
+                            : "bg-white/10 hover:bg-white/25 text-white/90 hover:text-white border-white/20 hover:border-white/40 shadow-white/10"
+                            }`}
+                          title={isInfoOpen ? "Close info & return to live site" : "View Project Overview, Features & Tech Stack"}
+                        >
+                          {isInfoOpen ? (
+                            <svg
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                              <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          ) : (
+                            <span className="w-4 h-4 rounded-full border border-current flex items-center justify-center font-bold text-[11px] italic font-serif">
+                              i
+                            </span>
+                          )}
+                          <span>{isInfoOpen ? "Close" : "Info"}</span>
+                        </button>
+
+                        {/* Direct External Link */}
+                        <a
+                          href={selectedProject.demoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 hover:text-emerald-100 text-xs sm:text-sm font-mono font-medium tracking-wide border border-emerald-500/35 hover:border-emerald-400/60 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-lg hover:shadow-emerald-500/20"
+                          title="Open live site in new tab"
+                        >
+                          <span>Open site</span>
                           <svg
                             width="14"
                             height="14"
@@ -984,133 +996,103 @@ export default function PortfolioSection({
                             strokeLinecap="round"
                             strokeLinejoin="round"
                           >
-                            <line x1="18" y1="6" x2="6" y2="18" />
-                            <line x1="6" y1="6" x2="18" y2="18" />
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <polyline points="15 3 21 3 21 9" />
+                            <line x1="10" y1="14" x2="21" y2="3" />
                           </svg>
-                        ) : (
-                          <span className="w-4 h-4 rounded-full border border-current flex items-center justify-center font-bold text-[11px] italic font-serif">
-                            i
-                          </span>
-                        )}
-                        <span>{isInfoOpen ? "Close" : "Info"}</span>
-                      </button>
+                        </a>
 
-                      {/* Direct External Link */}
-                      <a
-                        href={selectedProject.demoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 hover:text-emerald-100 text-xs sm:text-sm font-mono font-medium tracking-wide border border-emerald-500/35 hover:border-emerald-400/60 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-lg hover:shadow-emerald-500/20"
-                        title="Open live site in new tab"
-                      >
-                        <span>Open site</span>
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
+                        {/* Zoom Out Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isInfoOpen) {
+                              setIsInfoOpen(false);
+                              return;
+                            }
+                            scrollExpandRef.current?.scrollToTop();
+                          }}
+                          className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/25 text-white/90 hover:text-white text-xs sm:text-sm font-mono font-medium tracking-wide border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-lg hover:shadow-white/10 mr-2"
+                          title={isInfoOpen ? "Close info & return to live site" : "Zoom out back to overview (or scroll up)"}
                         >
-                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                          <polyline points="15 3 21 3 21 9" />
-                          <line x1="10" y1="14" x2="21" y2="3" />
-                        </svg>
-                      </a>
-
-                      {/* Zoom Out Button */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (isInfoOpen) {
-                            setIsInfoOpen(false);
-                            return;
-                          }
-                          scrollExpandRef.current?.scrollToTop();
-                        }}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/25 text-white/90 hover:text-white text-xs sm:text-sm font-mono font-medium tracking-wide border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-lg hover:shadow-white/10 mr-2"
-                        title={isInfoOpen ? "Close info & return to live site" : "Zoom out back to overview (or scroll up)"}
-                      >
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polyline points="15 18 9 12 15 6" />
-                        </svg>
-                        <span>Go Back</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Live Iframe with native-site-cursor enabled for the site's own cursor */}
-                  <div className={`relative flex-1 w-full h-full overflow-hidden ${isInfoOpen ? "hidden" : "block native-site-cursor"}`}>
-                    <iframe
-                      src={selectedProject.demoUrl}
-                      title={selectedProject.title}
-                      className="w-full h-full border-none bg-neutral-900"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                      loading="lazy"
-                    />
-                  </div>
-
-                  {/* Information Overlay with MagicBento Grid */}
-                  {isInfoOpen && (
-                    <div
-                      className="relative z-20 flex-1 w-full h-full overflow-y-auto bg-neutral-950/95 backdrop-blur-2xl p-4 sm:p-6 md:p-8 flex flex-col items-center"
-                      onWheel={(e) => {
-                        // Isolate scrolling completely inside info overlay: never bubble to zoom-out handler!
-                        e.stopPropagation();
-                      }}
-                      onTouchMove={(e) => {
-                        e.stopPropagation();
-                      }}
-                    >
-                      <div className="w-full max-w-5xl my-auto py-4">
-                        {/* Dossier Header */}
-                        <div className="flex items-center justify-between mb-5 pb-3 border-b border-white/10 select-none">
-                          <div className="flex items-center gap-3">
-                            <span className="px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono text-xs uppercase tracking-wider">
-                              Project Information
-                            </span>
-
-                          </div>
-                          <span className="text-xs text-white/50 font-mono tracking-wide">
-                            Press Esc to return
-                          </span>
-                        </div>
-
-                        {/* Magic Bento Grid */}
-                        <MagicBento
-                          columns={4}
-                          rowHeight={200}
-                          gap={12}
-                          radius={20}
-                          enableBorderGlow={true}
-                          enableSpotlight={true}
-                          spotlightRadius={300}
-                          clickEffect={true}
-                          enableTilt={true}
-                          textAutoHide={false}
-                          items={getMagicBentoItems(selectedProject.title)}
-                        />
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <polyline points="15 18 9 12 15 6" />
+                          </svg>
+                          <span>Go Back</span>
+                        </button>
                       </div>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </>
-        )}
+
+                    {/* Live Iframe with native-site-cursor enabled for the site's own cursor */}
+                    <div className={`relative flex-1 w-full h-full overflow-hidden ${isInfoOpen ? "hidden" : "block native-site-cursor"}`}>
+                      <iframe
+                        src={selectedProject.demoUrl}
+                        title={selectedProject.title}
+                        className="w-full h-full border-none bg-neutral-900"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                        loading="lazy"
+                      />
+                    </div>
+
+                    {/* Information Overlay with MagicBento Grid */}
+                    {isInfoOpen && (
+                      <div
+                        className="relative z-20 flex-1 w-full h-full overflow-y-auto bg-neutral-950/95 backdrop-blur-2xl p-4 sm:p-6 md:p-8 flex flex-col items-center"
+                        onWheel={(e) => {
+                          // Isolate scrolling completely inside info overlay: never bubble to zoom-out handler!
+                          e.stopPropagation();
+                        }}
+                        onTouchMove={(e) => {
+                          e.stopPropagation();
+                        }}
+                      >
+                        <div className="w-full max-w-5xl my-auto py-4">
+                          {/* Dossier Header */}
+                          <div className="flex items-center justify-between mb-5 pb-3 border-b border-white/10 select-none">
+                            <div className="flex items-center gap-3">
+                              <span className="px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono text-xs uppercase tracking-wider">
+                                Project Information
+                              </span>
+
+                            </div>
+                            <span className="text-xs text-white/50 font-mono tracking-wide">
+                              Press Esc to return
+                            </span>
+                          </div>
+
+                          {/* Magic Bento Grid */}
+                          <MagicBento
+                            columns={4}
+                            rowHeight={200}
+                            gap={12}
+                            radius={20}
+                            enableBorderGlow={true}
+                            enableSpotlight={true}
+                            spotlightRadius={300}
+                            clickEffect={true}
+                            enableTilt={true}
+                            textAutoHide={false}
+                            items={getMagicBentoItems(selectedProject.title)}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
-    </div>
-  );
+      );
 }

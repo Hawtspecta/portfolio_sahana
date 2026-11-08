@@ -415,8 +415,8 @@ export default function Home() {
         fastForwardTrigger={heroFastForwardTrigger}
       />
 
-      {/* "Scroll to explore" hint — visible throughout from Hero until the portfolio section (retro PC) */}
-      {isLastFrame && (!isAboutActive || transitionProgress < 0.98) && (
+      {/* "Scroll to explore" hint — visible on Hero before user transitions to retro PC */}
+      {isLastFrame && !isAboutActive && heroProgress < 0.98 && (
         <div
           onClick={handleScrollToExploreClick}
           className="fixed bottom-9 left-1/2 -translate-x-1/2 z-[56] animate-bounce pointer-events-auto cursor-pointer select-none transition-all duration-300 ease-out"

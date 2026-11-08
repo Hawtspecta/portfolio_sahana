@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { Renderer, Program, Mesh, Triangle, Plane, Texture, RenderTarget } from 'ogl';
 
 import './FlexCarousel.css';
@@ -255,7 +255,7 @@ const Digits = ({ value }) => (
   </span>
 );
 
-const FlexCarousel = ({
+const FlexCarousel = forwardRef(({
   items = DEFAULT_ITEMS,
   preset = 'liquid',
   intro = 'rise',
@@ -284,7 +284,7 @@ const FlexCarousel = ({
   onScrollPrev,
   className = '',
   style
-}) => {
+}, ref) => {
   const containerRef = useRef(null);
   const settingsRef = useRef(null);
   const itemsRef = useRef(items);
@@ -293,6 +293,12 @@ const FlexCarousel = ({
   const [active, setActive] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [focusOpen, setFocusOpen] = useState(false);
+
+  useImperativeHandle(ref, () => ({
+    handleWheel: (e) => engineRef.current?.handleWheel?.(e),
+    step: (dir) => engineRef.current?.step?.(dir),
+    wake: () => engineRef.current?.wake?.()
+  }), []);
 
   const base = BEND_PRESETS[preset] || BEND_PRESETS.liquid;
   const pick = (value, key) => (value === undefined || value === null ? base[key] : value);
@@ -1181,8 +1187,8 @@ const FlexCarousel = ({
     const onWheel = e => {
       const s = settingsRef.current;
       if (!s || e.ctrlKey) return;
-      let dx = e.deltaX;
-      let dy = e.deltaY;
+      let dx = e.deltaX ?? 0;
+      let dy = e.deltaY ?? 0;
       if (e.shiftKey && Math.abs(dx) < Math.abs(dy)) {
         dx = dy;
         dy = 0;
@@ -1196,14 +1202,14 @@ const FlexCarousel = ({
 
       // If at or before the 1st tab (Project 1) and user scrolls back / up:
       if (rawDelta < -8 && pos <= m.minPos + 25 && goal <= m.minPos + 25) {
-        e.preventDefault();
-        e.stopPropagation();
+        e.preventDefault?.();
+        e.stopPropagation?.();
         callbacksRef.current.onScrollPrev?.();
         return;
       }
 
-      e.preventDefault();
-      e.stopPropagation();
+      e.preventDefault?.();
+      e.stopPropagation?.();
       visible = true;
       skipIntro();
       interactedAt = performance.now();
@@ -1294,7 +1300,14 @@ const FlexCarousel = ({
         dirty = true;
         start();
       },
-      setItems
+      setItems,
+      handleWheel: onWheel,
+      step: (dir) => {
+        const s = settingsRef.current;
+        if (!s) return;
+        const m = metrics(s);
+        step(m, dir);
+      }
     };
 
     resize();
@@ -1355,6 +1368,8 @@ const FlexCarousel = ({
       </div>
     </div>
   );
-};
+});
+
+FlexCarousel.displayName = 'FlexCarousel';
 
 export default FlexCarousel;
