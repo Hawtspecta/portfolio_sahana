@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import SplashScreen from "@/components/SplashScreen";
 import HeroSection, { FastForwardHandoff } from "@/components/HeroSection";
 import MetaBalls from "@/components/MetaBalls";
@@ -8,11 +8,15 @@ import AboutTransition from "@/components/AboutTransition";
 import PortfolioSection from "@/components/PortfolioSection";
 import SideScrollBar from "@/components/SideScrollBar";
 import RocketBoostSkip from "@/components/RocketBoostSkip";
+import LampToggle from "@/components/LampToggle";
 import { initGlobalLenis, useLenis } from "@/lib/lenis";
 
 export default function Home() {
   const [isLastFrame, setIsLastFrame] = useState(false);
   const [isAboutActive, setIsAboutActive] = useState(false);
+  const [isPortfolioActive, setIsPortfolioActive] = useState(false);
+  const [portfolioScrollProgress, setPortfolioScrollProgress] = useState(0);
+  const [targetPortfolioProgress, setTargetPortfolioProgress] = useState<number | null>(null);
   const [splashProgress, setSplashProgress] = useState(0);
   const [heroProgress, setHeroProgress] = useState(0);
   const [transitionProgress, setTransitionProgress] = useState(0);
@@ -25,8 +29,154 @@ export default function Home() {
   const [transitionFastForwardTrigger, setTransitionFastForwardTrigger] = useState(0);
   const [fastForwardHandoff, setFastForwardHandoff] = useState<FastForwardHandoff | null>(null);
   const [isSplashReady, setIsSplashReady] = useState(false);
+  const [isProjectLiveExpanded, setIsProjectLiveExpanded] = useState(false);
+  const hasRestoredRef = useRef(false);
 
   const lenis = useLenis();
+
+  // Intercept hard refresh shortcuts (Ctrl+Shift+R, Ctrl+F5, Shift+F5, F5/Fn+F5 with Shift)
+  useEffect(() => {
+    const handleHardRefreshKeys = (e: KeyboardEvent) => {
+      // Ctrl+Shift+R or Cmd+Shift+R
+      const isCtrlShiftR = (e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "r" || e.key === "R");
+      // Ctrl+F5 or Shift+F5 or F5
+      const isF5 = e.key === "F5";
+      const isHardF5 = isF5 && (e.ctrlKey || e.shiftKey);
+
+      if (isCtrlShiftR || isHardF5) {
+        try {
+          sessionStorage.removeItem("portfolio_saved_state");
+          localStorage.removeItem("portfolio_saved_state");
+        } catch { }
+      }
+    };
+
+    window.addEventListener("keydown", handleHardRefreshKeys, true);
+    return () => window.removeEventListener("keydown", handleHardRefreshKeys, true);
+  }, []);
+
+  // Restore screen and section state across page reloads (except when hard refreshed)
+  useEffect(() => {
+    try {
+      // Check PerformanceNavigationTiming for reload type or cache bypass
+      const navEntries = performance.getEntriesByType("navigation");
+      if (navEntries.length > 0) {
+        const nav = navEntries[0] as PerformanceNavigationTiming;
+        // In some browsers or conditions, hard refresh has transferSize 0 from server revalidation or type reload
+        // Also check legacy performance.navigation if present
+      }
+
+      // If storage was cleared by key listener or hard reload, start from beginning
+      const raw =
+        sessionStorage.getItem("portfolio_saved_state") ||
+        localStorage.getItem("portfolio_saved_state");
+      if (!raw) return;
+
+      const saved = JSON.parse(raw);
+      if (!saved || !saved.section) return;
+
+      hasRestoredRef.current = true;
+      if (
+        saved.section === "projects" ||
+        saved.section === "expanded_project" ||
+        saved.expandedProjectTitle
+      ) {
+        setIsLastFrame(true);
+        setIsAboutActive(true);
+        setIsPortfolioActive(true);
+        setTransitionProgress(1);
+        setTargetAboutProgress(1);
+        setTargetSplashProgress(1);
+        setPortfolioScrollProgress(1);
+        setTargetPortfolioProgress(1);
+        if (saved.expandedProjectTitle || saved.section === "expanded_project") {
+          setIsProjectLiveExpanded(true);
+        }
+      } else if (saved.section === "about") {
+        setIsLastFrame(true);
+        setIsAboutActive(true);
+        setIsPortfolioActive(true);
+        setTransitionProgress(1);
+        setTargetAboutProgress(1);
+        setTargetSplashProgress(1);
+        setPortfolioScrollProgress(0);
+        setTargetPortfolioProgress(0);
+      } else if (saved.section === "transition") {
+        setIsLastFrame(true);
+        setIsAboutActive(true);
+        setIsPortfolioActive(false);
+        setTargetSplashProgress(1);
+        const tp = saved.transitionProgress ?? 0.5;
+        setTransitionProgress(tp);
+        setTargetAboutProgress(tp);
+        setPortfolioScrollProgress(0);
+        setTargetPortfolioProgress(0);
+      } else if (saved.section === "hero") {
+        setIsLastFrame(true);
+        setIsAboutActive(false);
+        setIsPortfolioActive(false);
+        setTargetSplashProgress(1);
+        const hp = saved.heroProgress ?? 0.5;
+        setHeroProgress(hp);
+        setTargetHeroProgress(hp);
+        setTransitionProgress(0);
+        setPortfolioScrollProgress(0);
+      }
+    } catch {
+      // Ignore corrupted storage
+    } finally {
+      hasRestoredRef.current = true;
+    }
+  }, []);
+
+  // Persist current screen and progress state to survive reloads
+  useEffect(() => {
+    // Only save after initial state restoration has completed
+    if (!hasRestoredRef.current) return;
+
+    try {
+      const existingRaw =
+        sessionStorage.getItem("portfolio_saved_state") ||
+        localStorage.getItem("portfolio_saved_state");
+      const existing = existingRaw ? JSON.parse(existingRaw) : {};
+
+      const currentSection = !isLastFrame
+        ? "splash"
+        : !isAboutActive
+          ? "hero"
+          : transitionProgress < 0.98
+            ? "transition"
+            : isProjectLiveExpanded
+              ? "expanded_project"
+              : portfolioScrollProgress >= 0.5
+                ? "projects"
+                : "about";
+
+      const stateToSave = {
+        ...existing,
+        section: currentSection,
+        isLastFrame,
+        isAboutActive,
+        heroProgress,
+        transitionProgress,
+        portfolioScrollProgress,
+        splashProgress,
+        timestamp: Date.now(),
+      };
+      sessionStorage.setItem("portfolio_saved_state", JSON.stringify(stateToSave));
+      localStorage.setItem("portfolio_saved_state", JSON.stringify(stateToSave));
+    } catch {
+      // Storage unavailable or quota exceeded
+    }
+  }, [
+    isLastFrame,
+    isAboutActive,
+    isProjectLiveExpanded,
+    transitionProgress,
+    portfolioScrollProgress,
+    heroProgress,
+    splashProgress,
+  ]);
 
   // Set manual scroll restoration to prevent browser from auto-scrolling on updates
   useEffect(() => {
@@ -88,12 +238,30 @@ export default function Home() {
   // Scrolling backward past frame 0 of About returns to hero screen (painted at frame 118)
   const handleScrollBackFromAbout = useCallback(() => {
     setIsAboutActive(false);
+    setIsPortfolioActive(false);
+    setPortfolioScrollProgress(0);
+    setTargetPortfolioProgress(null);
     setTransitionProgress(0);
     setTargetAboutProgress(null);
-    setTargetHeroProgress(null);
     setHeroFastForwardTrigger(0);
+    setTargetHeroProgress(null);
     setTransitionFastForwardTrigger(0);
     setFastForwardHandoff(null);
+  }, []);
+
+  // Scrolling backward past About section smoothly returns to the transition frames
+  const handleScrollBackFromPortfolio = useCallback(() => {
+    setIsPortfolioActive(false);
+    setPortfolioScrollProgress(0);
+    setTargetPortfolioProgress(null);
+    const handoffProgress = 104 / 105;
+    setTransitionProgress(handoffProgress);
+    setTargetAboutProgress(handoffProgress);
+  }, []);
+
+  const handlePortfolioProgressChange = useCallback((prog: number) => {
+    setPortfolioScrollProgress(prog);
+    setTargetPortfolioProgress(null);
   }, []);
 
   // Splash progress handler
@@ -106,6 +274,13 @@ export default function Home() {
   const handleProgressChange = useCallback((progress: number) => {
     setTransitionProgress(progress);
     setTargetAboutProgress(null);
+  }, []);
+
+  // Dedicated landing callback: only activates PortfolioSection when forward approach actually completes
+  const handleAboutLandingComplete = useCallback(() => {
+    setPortfolioScrollProgress(0);
+    setTargetPortfolioProgress(0);
+    setIsPortfolioActive(true);
   }, []);
 
   // Hero progress handler
@@ -136,59 +311,77 @@ export default function Home() {
 
   // Calculate overall scrollytelling progress for the side scrollbar (0 to 1):
   // - On splash screen: tracks splash sequence from 0 to 1
-  // - Once splash screen completes: tracks site journey (Hero + About) from 0 to 1 (no space reserved for splash!)
-  const overallProgress = isLastFrame
-    ? isAboutActive
-      ? 0.5 + transitionProgress * 0.5
-      : heroProgress * 0.5
-    : splashProgress;
+  // - Once splash screen completes:
+  //   Hero: 0.0 -> 0.40
+  //   About Transition: 0.40 -> 0.75
+  //   Portfolio (PC -> MY CREATIONS.EXE): 0.75 -> 1.00
+  const overallProgress = !isLastFrame
+    ? splashProgress
+    : isAboutActive
+      ? isPortfolioActive
+        ? 0.75 + portfolioScrollProgress * 0.25
+        : 0.40 + transitionProgress * 0.35
+      : heroProgress * 0.40;
 
-  // Smoothly scrub via the edge scrollbar:
+  // Smoothly scrub via the edge scrollbar across all sections:
   const handleScrollToProgress = useCallback((targetProgress: number) => {
     if (!isLastFrame) {
       // While on splash screen, scrub splash screen directly (0 to 1)
       setTargetSplashProgress(targetProgress);
     } else {
-      // Once splash screen has completed, scrub Hero (0 to 0.5) and About transition (0.5 to 1.0)
-      // Splash screen is never brought back and takes no space!
-      if (targetProgress < 0.5) {
-        const hp = targetProgress / 0.5;
+      if (targetProgress < 0.40) {
+        // Hero Section
+        const hp = Math.min(1, targetProgress / 0.40);
+        setHeroProgress(hp);
         setTargetHeroProgress(hp);
         setTargetAboutProgress(null);
-        setIsAboutActive((prev) => {
-          if (prev) {
-            setTransitionProgress(0);
-            return false;
-          }
-          return prev;
-        });
-      } else {
-        const ap = (targetProgress - 0.5) / 0.5;
+        setTargetPortfolioProgress(null);
+        setIsAboutActive(false);
+        setIsPortfolioActive(false);
+      } else if (targetProgress < 0.75) {
+        // About Transition
+        const ap = Math.min(1, (targetProgress - 0.40) / 0.35);
+        setTransitionProgress(ap);
         setTargetAboutProgress(ap);
         setTargetHeroProgress(null);
-        setIsAboutActive((prev) => (!prev ? true : prev));
+        setTargetPortfolioProgress(null);
+        setIsAboutActive(true);
+        setIsPortfolioActive(false);
+      } else {
+        // Portfolio Section (PC -> MY CREATIONS.EXE continuous scroll)
+        const pp = Math.min(1, Math.max(0, (targetProgress - 0.75) / 0.25));
+        setTransitionProgress(1);
+        setTargetAboutProgress(1);
+        setTargetHeroProgress(null);
+        setIsAboutActive(true);
+        setIsPortfolioActive(true);
+        setPortfolioScrollProgress(pp);
+        setTargetPortfolioProgress(pp);
       }
     }
   }, [isLastFrame]);
 
   // Step-by-step skip handler with Rocket Boost speed streaks:
-  // Splash Screen -> About (Hero) -> Transition -> Portfolio (Retro PC)
+  // Splash Screen -> Hero -> Transition (Retro PC About section)
   const handleUniversalSkip = useCallback(() => {
     if (!isLastFrame) {
-      // 1. On Splash Screen -> Fast-forward all splash frames sequentially at rocket speed
       setSplashFastForwardTrigger(Date.now());
     } else if (!isAboutActive) {
-      // 2. On About (Hero) -> Fast-forward all 119 hero typewriter frames sequentially at rocket speed
       setHeroFastForwardTrigger(Date.now());
-    } else if (transitionProgress < 0.98) {
-      // 3. On Transition -> Fast-forward all 106 transition frames sequentially at rocket speed
+    } else if (!isPortfolioActive) {
       setFastForwardHandoff(null);
+      setPortfolioScrollProgress(0);
+      setTargetPortfolioProgress(0);
       setTransitionFastForwardTrigger(Date.now());
     }
-  }, [isLastFrame, isAboutActive, transitionProgress]);
+  }, [isLastFrame, isAboutActive, isPortfolioActive]);
 
-  // Skip button persists starting from splash screen until the last frame of transition (never disappears before portfolio, hidden on loading screen)
-  const isSkipButtonVisible = isSplashReady && (!isAboutActive || transitionProgress < 0.98);
+  // Skip button persists through splash screen, hero, and transition (including the last transition frame).
+  // It is hidden on the About section, Portfolio/Creations section, and when a project is expanded.
+  const isSkipButtonVisible =
+    isSplashReady &&
+    !isPortfolioActive &&
+    !isProjectLiveExpanded;
 
   return (
     <>
@@ -276,7 +469,7 @@ export default function Home() {
               spacing={0.56}
               paused={!isLastFrame || transitionProgress > 70 / 105}
               collapseProgress={isAboutActive ? Math.min(1, transitionProgress / (70 / 105)) : 0}
-              dpr={1.2}
+              dpr={typeof window !== "undefined" ? Math.max(window.devicePixelRatio || 1, 2) : 2}
             />
           </div>
 
@@ -302,7 +495,7 @@ export default function Home() {
               spacing={0.58}
               paused={!isLastFrame || transitionProgress > 70 / 105}
               collapseProgress={isAboutActive ? Math.min(1, transitionProgress / (70 / 105)) : 0}
-              dpr={1.2}
+              dpr={typeof window !== "undefined" ? Math.max(window.devicePixelRatio || 1, 2) : 2}
             />
           </div>
         </div>
@@ -312,20 +505,37 @@ export default function Home() {
       <AboutTransition
         lenis={lenis}
         isActive={isAboutActive}
+        isPortfolioActive={isAboutActive && isPortfolioActive}
+        portfolioScrollPos={portfolioScrollProgress}
         onProgressChange={handleProgressChange}
+        onLandingComplete={handleAboutLandingComplete}
         onScrollBackToHero={handleScrollBackFromAbout}
         targetProgress={targetAboutProgress}
         fastForwardTrigger={transitionFastForwardTrigger}
         handoff={fastForwardHandoff}
       />
 
-      {/* Portfolio section — bg_port background + interactive PC overlay after transition completes */}
-      <PortfolioSection isActive={isAboutActive && transitionProgress >= 0.98} />
+      {/* Portfolio section — continuous scrolling PC (Who's behind the screen) & MY CREATIONS.EXE */}
+      <PortfolioSection
+        isActive={isAboutActive && isPortfolioActive}
+        externalScrollProgress={targetPortfolioProgress}
+        onPortfolioProgressChange={handlePortfolioProgressChange}
+        onScrollBackToTransition={handleScrollBackFromPortfolio}
+        onExpandedStateChange={setIsProjectLiveExpanded}
+      />
 
-      {/* Beautiful Native-Style Edge Scrollbar — active across entire journey including Splash Screen */}
+      {/* Interactive Pull-String Lamp Theme Toggle — visible once splash screen completes */}
+      {isLastFrame && (
+        <LampToggle
+          className={`right-12 sm:right-20 md:right-24 transition-opacity duration-500 ${isProjectLiveExpanded ? "opacity-0 pointer-events-none" : "opacity-100"
+            }`}
+        />
+      )}
+
+      {/* Beautiful Native-Style Edge Scrollbar — active across entire journey, smoothly hidden during live site expansion */}
       <SideScrollBar
         progress={overallProgress}
-        isVisible={isSplashReady}
+        isVisible={isSplashReady && !isProjectLiveExpanded}
         onScrollToProgress={handleScrollToProgress}
       />
     </>

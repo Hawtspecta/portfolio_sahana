@@ -40,9 +40,14 @@ export default function HeroSection({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imagesRef = useRef<HTMLImageElement[]>([]);
 
-  const targetFrameRef = useRef(0);
-  const smoothFrameRef = useRef(0);
-  const lastDrawnFrameRef = useRef(0);
+  const initialFrame = isAboutActive
+    ? TOTAL_FRAMES - 1
+    : targetProgress != null
+    ? Math.min(TOTAL_FRAMES - 1, Math.max(0, Math.round(targetProgress * (TOTAL_FRAMES - 1))))
+    : 0;
+  const targetFrameRef = useRef(initialFrame);
+  const smoothFrameRef = useRef(initialFrame);
+  const lastDrawnFrameRef = useRef(initialFrame);
   const scrubAnimIdRef = useRef<number | null>(null);
   const hasCompletedRef = useRef(false);
   const isAboutActiveRef = useRef(isAboutActive);
@@ -78,11 +83,11 @@ export default function HeroSection({
   const imagesLoadedRef = useRef(false);
   const loadedCountRef = useRef(0);
 
-  // ─── 1. Resize Canvas with Hardware-Accelerated Capped DPR ─────────
+  // ─── 1. Resize Canvas with Native High-DPI Retina Buffer ─────────
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const dpr = Math.max(window.devicePixelRatio || 1, 2);
     const targetW = Math.round(window.innerWidth * dpr);
     const targetH = Math.round(window.innerHeight * dpr);
 
@@ -92,17 +97,20 @@ export default function HeroSection({
       const ctx = canvas.getContext("2d");
       if (ctx) {
         ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = "medium";
+        ctx.imageSmoothingQuality = "high";
       }
     }
   }, []);
 
-  // ─── 2. Draw Frame to Canvas with Bilinear Smoothing ────────────────
+  // ─── 2. Draw Frame to Canvas with High Quality Filtering ────────────
   const drawFrame = useCallback((frameIndex: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
 
     const targetImg = imagesRef.current[frameIndex];
     if (targetImg && targetImg.complete && targetImg.naturalWidth > 0) {
@@ -396,7 +404,7 @@ export default function HeroSection({
     >
       <canvas
         ref={canvasRef}
-        className="w-full h-full object-fill cursor-default block select-none"
+        className="w-full h-full object-fill cursor-default block select-none render-high-quality"
       />
     </div>
   );

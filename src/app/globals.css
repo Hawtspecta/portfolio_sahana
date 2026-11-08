@@ -48,6 +48,18 @@ html.lenis body {
   overflow: hidden;
 }
 
+.render-high-quality {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: high-quality;
+  transform: translateZ(0);
+}
+
+.render-pixelated {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  transform: translateZ(0);
+}
+
 .lenis.lenis-smooth iframe {
   pointer-events: none;
 }
@@ -59,14 +71,19 @@ body::-webkit-scrollbar,
   display: none; /* Chrome, Safari, Edge */
 }
 
-/* ─── Hide OS Default Cursor Completely ──────────────────────────── */
+/* ─── Hide OS Default Cursor Completely (Except inside interactive live demo frames) ─── */
 @media (hover: hover) and (pointer: fine) {
-  *,
-  *::before,
-  *::after,
+  *:not(.native-site-cursor):not(.native-site-cursor *),
+  *:not(.native-site-cursor):not(.native-site-cursor *)::before,
+  *:not(.native-site-cursor):not(.native-site-cursor *)::after,
   html,
   body {
     cursor: none !important;
+  }
+
+  .native-site-cursor,
+  .native-site-cursor iframe {
+    cursor: auto !important;
   }
 }
 
@@ -95,47 +112,44 @@ body::-webkit-scrollbar,
   will-change: transform;
 }
 
-/* ─── Periodic Attention Wobble for the Retro PC (Starts immediately on enter, relaxed gap) ─── */
+/* ─── Periodic Attention Wobble for the Retro PC (Pure GPU Composited: 60/120 FPS) ─── */
 @keyframes pcWobble {
   0% {
-    transform: translateY(0px) rotate(0deg) scale(1);
-    filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.18)) drop-shadow(0 6px 10px rgba(0, 0, 0, 0.1));
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
   }
   1.5% {
-    transform: translateY(-4px) rotate(-2deg) scale(1.02);
+    transform: translate3d(0, -4px, 0) rotate(-2deg) scale(1.02);
   }
   3% {
-    transform: translateY(-9px) rotate(3.5deg) scale(1.04);
-    filter: drop-shadow(0 28px 45px rgba(0, 0, 0, 0.35)) drop-shadow(0 12px 18px rgba(0, 0, 0, 0.22));
+    transform: translate3d(0, -9px, 0) rotate(3.5deg) scale(1.04);
   }
   4.5% {
-    transform: translateY(-3px) rotate(-3deg) scale(1.03);
+    transform: translate3d(0, -3px, 0) rotate(-3deg) scale(1.03);
   }
   6% {
-    transform: translateY(-6px) rotate(2.2deg) scale(1.022);
+    transform: translate3d(0, -6px, 0) rotate(2.2deg) scale(1.022);
   }
   7.5% {
-    transform: translateY(-1.5px) rotate(-1.2deg) scale(1.012);
+    transform: translate3d(0, -1.5px, 0) rotate(-1.2deg) scale(1.012);
   }
   9% {
-    transform: translateY(-2px) rotate(0.6deg) scale(1.005);
+    transform: translate3d(0, -2px, 0) rotate(0.6deg) scale(1.005);
   }
   11% {
-    transform: translateY(0px) rotate(0deg) scale(1);
-    filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.18)) drop-shadow(0 6px 10px rgba(0, 0, 0, 0.1));
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
   }
   100% {
-    transform: translateY(0px) rotate(0deg) scale(1);
-    filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.18)) drop-shadow(0 6px 10px rgba(0, 0, 0, 0.1));
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
   }
 }
 
 .animate-pc-wobble,
 .animate-pc-float {
+  filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.18)) drop-shadow(0 6px 10px rgba(0, 0, 0, 0.1));
   animation: pcWobble 10s cubic-bezier(0.25, 1, 0.5, 1) infinite;
   animation-delay: 0s;
   transform-origin: center center;
-  will-change: transform, filter;
+  will-change: transform;
 }
 
 /* ─── Gradient ASCII Styles ──────────────────────────────────────── */
@@ -247,5 +261,106 @@ body::-webkit-scrollbar,
   vertical-align: -0.12em;
   border-radius: 1px;
 }
+
+/* ─── Lamp Pull-Cord Physics Animations ─── */
+@keyframes lampSwing {
+  0% {
+    transform: rotate(0deg);
+  }
+  20% {
+    transform: rotate(7deg);
+  }
+  40% {
+    transform: rotate(-5deg);
+  }
+  60% {
+    transform: rotate(3deg);
+  }
+  80% {
+    transform: rotate(-1deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+/* ─── Organic Apparent Ambient Wind Breeze for Suspended Lamp ─── */
+@keyframes lampWindBreeze {
+  0% {
+    transform: rotate(0deg) translate3d(0, 0, 0);
+  }
+  14% {
+    transform: rotate(3.2deg) translate3d(2.8px, 0.2px, 0);
+  }
+  26% {
+    transform: rotate(4.2deg) translate3d(4.0px, 0.4px, 0);
+  }
+  40% {
+    transform: rotate(-1.8deg) translate3d(-1.6px, 0.1px, 0);
+  }
+  54% {
+    transform: rotate(-3.8deg) translate3d(-3.6px, 0.3px, 0);
+  }
+  67% {
+    transform: rotate(1.2deg) translate3d(1.1px, 0.1px, 0);
+  }
+  78% {
+    transform: rotate(0.4deg) translate3d(0.3px, 0, 0);
+  }
+  88% {
+    transform: rotate(2.6deg) translate3d(2.4px, 0.2px, 0);
+  }
+  94% {
+    transform: rotate(-1.2deg) translate3d(-1px, 0.1px, 0);
+  }
+  100% {
+    transform: rotate(0deg) translate3d(0, 0, 0);
+  }
+}
+
+/* Secondary Harmonic Flutter for Hanging Pull-Cord */
+@keyframes cordWindBreeze {
+  0% {
+    transform: rotate(0deg);
+  }
+  16% {
+    transform: rotate(4.8deg);
+  }
+  28% {
+    transform: rotate(6.4deg);
+  }
+  42% {
+    transform: rotate(-2.6deg);
+  }
+  56% {
+    transform: rotate(-5.6deg);
+  }
+  69% {
+    transform: rotate(1.8deg);
+  }
+  80% {
+    transform: rotate(0.6deg);
+  }
+  90% {
+    transform: rotate(3.6deg);
+  }
+  96% {
+    transform: rotate(-1.8deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+html[data-theme="light"] {
+  --background: #fafaf9;
+  --foreground: #1c1917;
+}
+
+html[data-theme="dark"] {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
 
 

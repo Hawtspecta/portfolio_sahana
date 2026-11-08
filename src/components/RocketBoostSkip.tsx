@@ -53,11 +53,11 @@ export default function RocketBoostSkip({
     onSkip();
   }, [triggerHaptics, onSkip]);
 
+  if (!isVisible) return null;
+
   return (
     <div
-      className={`fixed inset-0 z-[60] pointer-events-none transition-opacity duration-300 ${
-        isVisible ? "opacity-100" : "opacity-0 pointer-events-none"
-      }`}
+      className="fixed inset-0 z-[60] pointer-events-none transition-opacity duration-300 opacity-100"
     >
       <button
         onClick={handleClick}
@@ -71,8 +71,8 @@ export default function RocketBoostSkip({
             alt="Skip"
             fill
             priority
-            sizes="(max-width: 768px) 25vw, 200px"
-            className="object-contain"
+            unoptimized
+            className="object-contain render-high-quality"
           />
         </div>
       </button>
