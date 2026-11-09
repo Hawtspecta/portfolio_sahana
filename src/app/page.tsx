@@ -46,6 +46,7 @@ export default function Home() {
       if (isCtrlShiftR || isHardF5) {
         try {
           sessionStorage.removeItem("portfolio_saved_state");
+          sessionStorage.removeItem("portfolio_session_initialized");
           localStorage.removeItem("portfolio_saved_state");
         } catch { }
       }
@@ -55,21 +56,35 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handleHardRefreshKeys, true);
   }, []);
 
-  // Restore screen and section state across page reloads (except when hard refreshed)
+  // Restore screen and section state across page reloads (except when opened fresh)
   useEffect(() => {
     try {
-      // Check PerformanceNavigationTiming for reload type or cache bypass
+      // Purge any legacy localStorage state so fresh visits never get locked into old sections
+      localStorage.removeItem("portfolio_saved_state");
+
+      // Check whether page was opened fresh (navigate, new tab, bookmark) vs an in-tab reload
+      let isReload = false;
       const navEntries = performance.getEntriesByType("navigation");
       if (navEntries.length > 0) {
         const nav = navEntries[0] as PerformanceNavigationTiming;
-        // In some browsers or conditions, hard refresh has transferSize 0 from server revalidation or type reload
-        // Also check legacy performance.navigation if present
+        isReload = nav.type === "reload";
+      } else if (typeof performance !== "undefined" && (performance as any).navigation) {
+        isReload = (performance as any).navigation.type === 1;
       }
 
-      // If storage was cleared by key listener or hard reload, start from beginning
-      const raw =
-        sessionStorage.getItem("portfolio_saved_state") ||
-        localStorage.getItem("portfolio_saved_state");
+      const sessionInitialized = sessionStorage.getItem("portfolio_session_initialized");
+
+      // When the website is opened fresh (new tab, new window, direct navigation):
+      // Clean slate: start from splash screen and reload all sets from scratch!
+      if (!isReload || !sessionInitialized) {
+        sessionStorage.removeItem("portfolio_saved_state");
+        sessionStorage.setItem("portfolio_session_initialized", "true");
+        hasRestoredRef.current = true;
+        return;
+      }
+
+      // If active in-tab reload, restore position from sessionStorage
+      const raw = sessionStorage.getItem("portfolio_saved_state");
       if (!raw) return;
 
       const saved = JSON.parse(raw);
@@ -129,15 +144,13 @@ export default function Home() {
     }
   }, []);
 
-  // Persist current screen and progress state to survive reloads
+  // Persist current screen and progress state to survive reloads (session-only, never cross-session localStorage)
   useEffect(() => {
     // Only save after initial state restoration has completed
     if (!hasRestoredRef.current) return;
 
     try {
-      const existingRaw =
-        sessionStorage.getItem("portfolio_saved_state") ||
-        localStorage.getItem("portfolio_saved_state");
+      const existingRaw = sessionStorage.getItem("portfolio_saved_state");
       const existing = existingRaw ? JSON.parse(existingRaw) : {};
 
       const currentSection = !isLastFrame
@@ -164,7 +177,6 @@ export default function Home() {
         timestamp: Date.now(),
       };
       sessionStorage.setItem("portfolio_saved_state", JSON.stringify(stateToSave));
-      localStorage.setItem("portfolio_saved_state", JSON.stringify(stateToSave));
     } catch {
       // Storage unavailable or quota exceeded
     }
@@ -448,7 +460,7 @@ export default function Home() {
             }`}
         >
           {/* Left MetaBalls — 2 blobs, expansive contour rings */}
-          <div className="absolute left-[5vw] sm:left-[7vw] lg:left-[8.5vw] top-[11%] sm:top-[13%] md:top-[14%] w-[18vw] min-w-[140px] max-w-[250px] h-[360px] max-h-[46vh] pointer-events-auto">
+          <div className={`absolute left-[5vw] sm:left-[7vw] lg:left-[8.5vw] top-[11%] sm:top-[13%] md:top-[14%] w-[18vw] min-w-[140px] max-w-[250px] h-[360px] max-h-[46vh] ${!isAboutActive ? "pointer-events-auto" : "pointer-events-none"}`}>
             <MetaBalls
               color="#000000"
               cursorBallColor="#000000"
@@ -474,7 +486,7 @@ export default function Home() {
           </div>
 
           {/* Right MetaBalls — 3 blobs, expansive contour rings */}
-          <div className="absolute right-[5vw] sm:right-[7vw] lg:right-[8.5vw] top-[15%] sm:top-[17%] md:top-[18%] w-[18vw] min-w-[140px] max-w-[250px] h-[360px] max-h-[46vh] pointer-events-auto">
+          <div className={`absolute right-[5vw] sm:right-[7vw] lg:right-[8.5vw] top-[15%] sm:top-[17%] md:top-[18%] w-[18vw] min-w-[140px] max-w-[250px] h-[360px] max-h-[46vh] ${!isAboutActive ? "pointer-events-auto" : "pointer-events-none"}`}>
             <MetaBalls
               color="#000000"
               cursorBallColor="#000000"

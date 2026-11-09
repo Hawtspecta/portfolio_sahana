@@ -48,6 +48,7 @@ export default function HeroSection({
   const targetFrameRef = useRef(initialFrame);
   const smoothFrameRef = useRef(initialFrame);
   const lastDrawnFrameRef = useRef(initialFrame);
+  const hasDrawnInitialRef = useRef(false);
   const scrubAnimIdRef = useRef<number | null>(null);
   const hasCompletedRef = useRef(false);
   const isAboutActiveRef = useRef(isAboutActive);
@@ -116,12 +117,6 @@ export default function HeroSection({
     if (targetImg && targetImg.complete && targetImg.naturalWidth > 0) {
       lastDrawnFrameRef.current = frameIndex;
       ctx.drawImage(targetImg, 0, 0, canvas.width, canvas.height);
-    } else {
-      // Retain last successfully drawn frame so there is NEVER a black flash or glitch
-      const fallbackImg = imagesRef.current[lastDrawnFrameRef.current || 0];
-      if (fallbackImg && fallbackImg.complete && fallbackImg.naturalWidth > 0) {
-        ctx.drawImage(fallbackImg, 0, 0, canvas.width, canvas.height);
-      }
     }
   }, []);
 
@@ -257,12 +252,12 @@ export default function HeroSection({
         const handleLoad = () => {
           loaded++;
           loadedCountRef.current = loaded;
-          if (loaded >= 5) {
+          if (loaded >= 5 && !hasDrawnInitialRef.current && lastDrawnFrameRef.current === 0) {
+            hasDrawnInitialRef.current = true;
             drawFrame(0);
           }
           if (loaded === TOTAL_FRAMES) {
             imagesLoadedRef.current = true;
-            drawFrame(lastDrawnFrameRef.current || 0);
           }
         };
         img.onload = handleLoad;
@@ -342,7 +337,7 @@ export default function HeroSection({
         // Upward scroll (scrub backward)
         if (deltaY < -3) {
           hasCompletedRef.current = false;
-          const deltaFrames = Math.max(0.6, Math.abs(deltaY) * 0.08);
+          const deltaFrames = Math.max(0.6, Math.min(8, Math.abs(deltaY) * 0.08));
           targetFrameRef.current = Math.max(0, targetFrameRef.current - deltaFrames);
         } else if (deltaY > 3) {
           // Downward scroll (scrub forward)
@@ -353,7 +348,7 @@ export default function HeroSection({
           ) {
             onScrollPastHeroRef.current?.();
           } else {
-            const deltaFrames = Math.max(0.6, Math.abs(deltaY) * 0.08);
+            const deltaFrames = Math.max(0.6, Math.min(8, Math.abs(deltaY) * 0.08));
             targetFrameRef.current = Math.min(TOTAL_FRAMES - 1, targetFrameRef.current + deltaFrames);
 
             if (targetFrameRef.current >= TOTAL_FRAMES - 1) {

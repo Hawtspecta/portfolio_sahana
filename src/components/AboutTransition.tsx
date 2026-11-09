@@ -51,6 +51,7 @@ export default function AboutTransition({
   const targetFrameRef = useRef(initialFrame);
   const smoothFrameRef = useRef(initialFrame);
   const lastDrawnFrameRef = useRef(initialFrame);
+  const hasDrawnInitialRef = useRef(false);
   const animIdRef = useRef<number | null>(null);
   const isScrolledBackRef = useRef(false);
   const isFastForwardingRef = useRef(false);
@@ -136,12 +137,6 @@ export default function AboutTransition({
     if (targetImg && targetImg.complete && targetImg.naturalWidth > 0) {
       lastDrawnFrameRef.current = frameIndex;
       ctx.drawImage(targetImg, 0, 0, canvas.width, canvas.height);
-    } else {
-      // Retain last successfully drawn frame so there is NEVER a black flash or glitch
-      const fallbackImg = imagesRef.current[lastDrawnFrameRef.current || 0];
-      if (fallbackImg && fallbackImg.complete && fallbackImg.naturalWidth > 0) {
-        ctx.drawImage(fallbackImg, 0, 0, canvas.width, canvas.height);
-      }
     }
   }, []);
 
@@ -264,12 +259,12 @@ export default function AboutTransition({
 
       const handleLoad = () => {
         loaded++;
-        if (loaded >= 5 && !imagesLoadedRef.current) {
+        if (loaded >= 5 && !hasDrawnInitialRef.current && lastDrawnFrameRef.current === 0) {
+          hasDrawnInitialRef.current = true;
           drawFrame(0);
         }
         if (loaded === TOTAL_FRAMES) {
           imagesLoadedRef.current = true;
-          drawFrame(lastDrawnFrameRef.current || 0);
         }
       };
       img.onload = handleLoad;
@@ -302,14 +297,16 @@ export default function AboutTransition({
     isScrolledBackRef.current = false;
     transitionCooldownRef.current = Date.now() + 450;
 
-    // Reset to start on entering About transition (only when entering via normal scroll, not in fast forward and not when dragging via scrollbar)
+    // Reset to start on entering About transition (only on initial mount when entering via normal scroll, not in fast forward and not when dragging via scrollbar)
     if (
+      !hasDrawnInitialRef.current &&
       !handoffRef.current &&
       !fastForwardTriggerRef.current &&
       targetProgressRef.current == null &&
       !isPortfolioActiveRef.current &&
       targetFrameRef.current <= 1
     ) {
+      hasDrawnInitialRef.current = true;
       targetFrameRef.current = 1;
       smoothFrameRef.current = 1;
       lastDrawnFrameRef.current = 1;
@@ -422,15 +419,7 @@ export default function AboutTransition({
 
     processDeltaRef.current = processDelta;
 
-    // Listen to unified Lenis virtual-scroll
-    let unsubscribeVirtualScroll: (() => void) | null = null;
-    if (lenis) {
-      unsubscribeVirtualScroll = lenis.on("virtual-scroll", ({ deltaY }) => {
-        processDelta(deltaY);
-      });
-    }
-
-    // Direct wheel handler for the window in case pointer events are transitioning
+    // Direct wheel handler for the window: reliable, captures 100% of wheel events exactly once
     const handleWindowWheel = (e: WheelEvent) => {
       if (!isActive || isPortfolioActiveRef.current || isFastForwardingRef.current) return;
       processDelta(e.deltaY);
@@ -454,7 +443,6 @@ export default function AboutTransition({
       processDeltaRef.current = null;
       window.removeEventListener("wheel", handleWindowWheel);
       window.removeEventListener("keydown", handleKeyDown);
-      if (unsubscribeVirtualScroll) unsubscribeVirtualScroll();
       if (animIdRef.current) {
         cancelAnimationFrame(animIdRef.current);
         animIdRef.current = null;
@@ -470,11 +458,6 @@ export default function AboutTransition({
           ? "opacity-100 pointer-events-auto visible"
           : "opacity-0 pointer-events-none invisible"
       }`}
-      onWheel={(e) => {
-        if (!isActive || isPortfolioActiveRef.current || isFastForwardingRef.current) return;
-        e.stopPropagation();
-        processDeltaRef.current?.(e.deltaY);
-      }}
     >
       <canvas
         ref={canvasRef}

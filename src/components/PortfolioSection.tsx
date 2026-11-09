@@ -115,12 +115,11 @@ export default function PortfolioSection({
     scrollPosRef.current = scrollPos;
   }, [scrollPos]);
 
-  // Restore saved project viewer state on mount (runs exclusively on client, preventing hydration mismatch)
+  // Restore saved project viewer state on mount (runs exclusively on client in-tab reload, preventing hydration mismatch)
   useEffect(() => {
     try {
-      const raw =
-        sessionStorage.getItem("portfolio_saved_state") ||
-        localStorage.getItem("portfolio_saved_state");
+      localStorage.removeItem("portfolio_saved_state");
+      const raw = sessionStorage.getItem("portfolio_saved_state");
       if (!raw) return;
       const saved = JSON.parse(raw);
       if (!saved) return;
@@ -180,12 +179,10 @@ export default function PortfolioSection({
     onExpandedStateChangeRef.current?.(isExpanded);
   }, [selectedProject, expandProgress, isVideoPlaying]);
 
-  // Save expanded project & modal state to session & local storage
+  // Save expanded project & modal state to session storage
   useEffect(() => {
     try {
-      const existingRaw =
-        sessionStorage.getItem("portfolio_saved_state") ||
-        localStorage.getItem("portfolio_saved_state");
+      const existingRaw = sessionStorage.getItem("portfolio_saved_state");
       const existing = existingRaw ? JSON.parse(existingRaw) : {};
 
       const updated = {
@@ -197,7 +194,6 @@ export default function PortfolioSection({
       };
 
       sessionStorage.setItem("portfolio_saved_state", JSON.stringify(updated));
-      localStorage.setItem("portfolio_saved_state", JSON.stringify(updated));
     } catch { }
   }, [selectedProject, expandProgress, isInfoOpen, isVideoPlaying]);
 
@@ -232,7 +228,7 @@ export default function PortfolioSection({
   }, []);
 
   // Centralized upward transition: Creations (MY CREATIONS.EXE) -> About (WHO'S BEHIND THE SCREEN?)
-  // Compulsorily stops at About and absorbs the remaining swipe inertia for 400ms
+  // Compulsorily stops at About and absorbs the remaining swipe inertia for 850ms
   const handleScrollUpToAbout = useCallback(() => {
     if (scrollPosRef.current === 0) {
       return;
@@ -240,8 +236,8 @@ export default function PortfolioSection({
 
     // Switch to About section (Section 0)
     updateScrollPos(0);
-    // Compulsorily stop at About: absorb any residual momentum of this swipe for 400ms
-    aboutArrivalCooldownUntilRef.current = Date.now() + 400;
+    // Compulsorily stop at About: absorb any residual momentum of this swipe for 850ms
+    aboutArrivalCooldownUntilRef.current = Date.now() + 850;
     scrollDownAccumulatorRef.current = 0;
     scrollUpAccumulatorRef.current = 0;
     setResistanceOffset(0);
@@ -256,15 +252,18 @@ export default function PortfolioSection({
       if (externalScrollProgress == null) {
         setScrollPos(0);
       }
-      // Cushion and absorb all incoming scroll momentum for 400ms
-      aboutArrivalCooldownUntilRef.current = Date.now() + 400;
+      // Compulsory pit stop at About: cushion and absorb all incoming transition scroll momentum for 850ms
+      aboutArrivalCooldownUntilRef.current = Date.now() + 850;
+      hasStoppedAtAboutRef.current = false;
       scrollDownAccumulatorRef.current = 0;
+      scrollUpAccumulatorRef.current = 0;
       setResistanceOffset(0);
     } else {
       setEntered(false);
       setIsHovered(false);
       setIsVideoPlaying(false);
       setScrollPos(0);
+      hasStoppedAtAboutRef.current = false;
     }
   }
 
@@ -323,16 +322,13 @@ export default function PortfolioSection({
       video.pause();
     }
     try {
-      const existingRaw =
-        sessionStorage.getItem("portfolio_saved_state") ||
-        localStorage.getItem("portfolio_saved_state");
+      const existingRaw = sessionStorage.getItem("portfolio_saved_state");
       const existing = existingRaw ? JSON.parse(existingRaw) : {};
       const updated = {
         ...existing,
         isVideoPlaying: false,
       };
       sessionStorage.setItem("portfolio_saved_state", JSON.stringify(updated));
-      localStorage.setItem("portfolio_saved_state", JSON.stringify(updated));
     } catch { }
   }, []);
 
@@ -353,9 +349,7 @@ export default function PortfolioSection({
     setExpandProgress(0);
     initialExpandedRef.current = false;
     try {
-      const existingRaw =
-        sessionStorage.getItem("portfolio_saved_state") ||
-        localStorage.getItem("portfolio_saved_state");
+      const existingRaw = sessionStorage.getItem("portfolio_saved_state");
       const existing = existingRaw ? JSON.parse(existingRaw) : {};
       const updated = {
         ...existing,
@@ -364,7 +358,6 @@ export default function PortfolioSection({
         isInfoOpen: false,
       };
       sessionStorage.setItem("portfolio_saved_state", JSON.stringify(updated));
-      localStorage.setItem("portfolio_saved_state", JSON.stringify(updated));
     } catch { }
     // Ensure we give a brief grace window so wheel/pointer events from the modal don't jump sections
     arrivalLockUntilRef.current = Date.now() + 500;
@@ -497,11 +490,29 @@ export default function PortfolioSection({
             return;
           }
 
-          // At About: next scroll up returns to transition frames on the very first scroll!
-          if (e.deltaY < -3) {
+          if (scrollUpResetTimeoutRef.current) {
+            clearTimeout(scrollUpResetTimeoutRef.current);
+            scrollUpResetTimeoutRef.current = null;
+          }
+
+          // 2. Compulsory pit stop at About:
+          // Moving up from About back to transition frames requires a conscious, deliberate upward scroll (threshold -280)
+          const REQUIRED_UP_THRESHOLD = -280;
+          scrollUpAccumulatorRef.current += e.deltaY;
+
+          if (scrollUpAccumulatorRef.current <= REQUIRED_UP_THRESHOLD) {
             scrollUpAccumulatorRef.current = 0;
             setResistanceOffset(0);
             onScrollBackToTransitionRef.current?.();
+          } else {
+            // Elastic upward rubber-band tension visual feedback
+            const tension = Math.min(36, (Math.abs(scrollUpAccumulatorRef.current) / Math.abs(REQUIRED_UP_THRESHOLD)) * 36);
+            setResistanceOffset(-tension);
+
+            scrollUpResetTimeoutRef.current = setTimeout(() => {
+              scrollUpAccumulatorRef.current = 0;
+              setResistanceOffset(0);
+            }, 450);
           }
         }
       } else {
