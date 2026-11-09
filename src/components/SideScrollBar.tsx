@@ -127,18 +127,18 @@ export default function SideScrollBar({
     >
       {/* Background track pill */}
       <div
-        className={`absolute inset-y-0 w-3.5 sm:w-4.5 rounded-full transition-colors duration-200 ${
+        className={`absolute inset-y-0 w-3.5 sm:w-4.5 rounded-full transition-colors duration-200 side-scrollbar-track ${
           isHovered || isDragging ? "bg-black/[0.07] backdrop-blur-[2px]" : "bg-transparent"
         }`}
       />
 
       {/* Precision Scrollbar Thumb - Floating Curved Pill */}
       <div
-        className={`absolute w-2.5 sm:w-3.5 rounded-full transition-[background-color,box-shadow,width] duration-150 cursor-grab active:cursor-grabbing pointer-events-none ${
+        className={`absolute w-2.5 sm:w-3.5 rounded-full transition-[background-color,box-shadow,width] duration-150 cursor-grab active:cursor-grabbing pointer-events-none side-scrollbar-thumb ${
           isDragging
-            ? "bg-neutral-900 shadow-md ring-1 ring-black/10 w-3 sm:w-4"
+            ? "bg-neutral-900 shadow-md ring-1 ring-black/10 w-3 sm:w-4 is-active"
             : isHovered
-            ? "bg-neutral-800/80 shadow-sm w-3 sm:w-4"
+            ? "bg-neutral-800/80 shadow-sm w-3 sm:w-4 is-hovered"
             : "bg-neutral-800/40"
         }`}
         style={{

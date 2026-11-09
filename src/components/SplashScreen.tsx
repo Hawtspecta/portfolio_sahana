@@ -114,6 +114,9 @@ export default function SplashScreen({
 
   const [loadProgress, setLoadProgress] = useState(0);
   const [ready, setReady] = useState(false);
+  const [firstFrameReady, setFirstFrameReady] = useState(false);
+  const hasDrawnFirstFrameRef = useRef(false);
+  const hasStartedPlaybackRef = useRef(false);
 
     // ─── Resize Canvas with Native High-DPI Retina Buffer ─────────
     const resizeCanvas = useCallback(() => {
@@ -422,37 +425,54 @@ return () => {
 
     let loadedCount = 0;
     const images: HTMLImageElement[] = new Array(TOTAL_FRAMES);
+    imagesRef.current = images;
 
-      for (let i = 0; i < TOTAL_FRAMES; i++) {
-        const frameNum = START_FRAME + i;
-        const img = new window.Image();
-        img.src = `${FRAME_PATH}${String(frameNum).padStart(3, "0")}${FRAME_EXT}`;
+    for (let i = 0; i < TOTAL_FRAMES; i++) {
+      const frameNum = START_FRAME + i;
+      const img = new window.Image();
+      img.src = `${FRAME_PATH}${String(frameNum).padStart(3, "0")}${FRAME_EXT}`;
 
-        if ("decode" in img) {
-          img.decode().catch(() => { });
+      if ("decode" in img) {
+        img.decode().catch(() => { });
+      }
+
+      const handleImageLoad = () => {
+        loadedCount++;
+        setLoadProgress(Math.round((loadedCount / TOTAL_FRAMES) * 100));
+
+        // Immediately draw the 1st frame and notify parent as soon as frame 0 arrives (< 50ms)
+        if (!hasDrawnFirstFrameRef.current && images[0]?.complete && images[0]?.naturalWidth > 0) {
+          hasDrawnFirstFrameRef.current = true;
+          setFirstFrameReady(true);
+          resizeCanvas();
+          if (!wasHeroActiveRef.current && !isHeroActiveRef.current) {
+            targetFrameRef.current = 0;
+            smoothFrameRef.current = 0;
+            currentRenderedFrameRef.current = 0;
+            drawFrame(0);
+          }
+          onReadyRef.current?.();
         }
 
-            const handleImageLoad = () => {
-              loadedCount++;
-              setLoadProgress(Math.round((loadedCount / TOTAL_FRAMES) * 100));
-              if (loadedCount === TOTAL_FRAMES) {
-                imagesRef.current = images;
-                setReady(true);
-                onReadyRef.current?.();
-                resizeCanvas();
-                if (!wasHeroActiveRef.current && !isHeroActiveRef.current) {
-                  targetFrameRef.current = 0;
-                  smoothFrameRef.current = 0;
-                  currentRenderedFrameRef.current = 0;
-                  drawFrame(0);
-                }
+        // Start playback as soon as initial buffer (10 frames) is ready or all frames loaded
+        if (!hasStartedPlaybackRef.current && (loadedCount >= Math.min(10, TOTAL_FRAMES) || loadedCount === TOTAL_FRAMES)) {
+          hasStartedPlaybackRef.current = true;
+          setReady(true);
+          onReadyRef.current?.();
+          resizeCanvas();
+          if (!wasHeroActiveRef.current && !isHeroActiveRef.current) {
+            targetFrameRef.current = 0;
+            smoothFrameRef.current = 0;
+            currentRenderedFrameRef.current = 0;
+            drawFrame(0);
           }
-        };
-        img.onload = handleImageLoad;
-        img.onerror = handleImageLoad;
-        images[i] = img;
-      }
-    }, [mounted, drawFrame, resizeCanvas]);
+        }
+      };
+      img.onload = handleImageLoad;
+      img.onerror = handleImageLoad;
+      images[i] = img;
+    }
+  }, [mounted, drawFrame, resizeCanvas]);
 
   // ─── Auto-start video playback when ready ─────────────────────────
   useEffect(() => {
@@ -501,21 +521,21 @@ return (
       className="fixed inset-0 w-full h-full z-0 block cursor-default render-high-quality"
     />
 
-              {/* Loading indicator */}
-              {!ready && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="w-48 h-1 bg-white/20 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-white rounded-full transition-all duration-200"
-                        style={{ width: `${loadProgress}%` }}
-                      />
-                    </div>
-                    <p className="text-white/60 text-sm font-mono">
-                      Loading {loadProgress}%
-                    </p>
-                  </div>
-                </div>
+      {/* Loading indicator — only visible before the 1st frame is ready */}
+      {!firstFrameReady && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-48 h-1 bg-white/20 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-white rounded-full transition-all duration-200"
+                style={{ width: `${loadProgress}%` }}
+              />
+            </div>
+            <p className="text-white/60 text-sm font-mono">
+              Loading {loadProgress}%
+            </p>
+          </div>
+        </div>
       )}
         </div>
       );

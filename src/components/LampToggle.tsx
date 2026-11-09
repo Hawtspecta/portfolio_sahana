@@ -25,14 +25,21 @@ export default function LampToggle({
   const hasToggledOnPullRef = useRef(false);
   const lastDragEndTimeRef = useRef(0);
 
+  const onThemeChangeRef = useRef(onThemeChange);
+  useEffect(() => {
+    onThemeChangeRef.current = onThemeChange;
+  }, [onThemeChange]);
+
   // Synchronize theme with html attribute and localStorage
   useEffect(() => {
     const saved = localStorage.getItem("portfolio-theme") as "dark" | "light" | null;
     const initialTheme = saved || defaultTheme;
     setTheme(initialTheme);
     document.documentElement.setAttribute("data-theme", initialTheme);
-    onThemeChange?.(initialTheme);
-  }, [defaultTheme, onThemeChange]);
+    setTimeout(() => {
+      onThemeChangeRef.current?.(initialTheme);
+    }, 0);
+  }, [defaultTheme]);
 
   // Satisfying mechanical "snick-clack" sound effect using Web Audio API
   const playClickSound = useCallback(() => {
@@ -82,14 +89,19 @@ export default function LampToggle({
       const next = prev === "dark" ? "light" : "dark";
       document.documentElement.setAttribute("data-theme", next);
       localStorage.setItem("portfolio-theme", next);
-      onThemeChange?.(next);
       return next;
     });
+
+    // Notify listener safely outside React's render/updater phase
+    setTimeout(() => {
+      const current = (document.documentElement.getAttribute("data-theme") as "dark" | "light") || "dark";
+      onThemeChangeRef.current?.(current);
+    }, 0);
 
     // Gentle pendulum swing after release
     setIsSwinging(true);
     setTimeout(() => setIsSwinging(false), 800);
-  }, [playClickSound, onThemeChange]);
+  }, [playClickSound]);
 
   // Direct click: animated automatic pull & snap-back
   const handleClick = useCallback(() => {

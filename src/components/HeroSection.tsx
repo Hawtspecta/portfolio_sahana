@@ -401,6 +401,10 @@ export default function HeroSection({
         ref={canvasRef}
         className="w-full h-full object-fill cursor-default block select-none render-high-quality"
       />
+      <div
+        className="absolute inset-0 pointer-events-none video-corner-overlay"
+        aria-hidden="true"
+      />
     </div>
   );
 }

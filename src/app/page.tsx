@@ -30,9 +30,19 @@ export default function Home() {
   const [fastForwardHandoff, setFastForwardHandoff] = useState<FastForwardHandoff | null>(null);
   const [isSplashReady, setIsSplashReady] = useState(false);
   const [isProjectLiveExpanded, setIsProjectLiveExpanded] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const hasRestoredRef = useRef(false);
 
   const lenis = useLenis();
+
+  // Initialize theme from DOM attribute or storage on mount
+  useEffect(() => {
+    const current =
+      (document.documentElement.getAttribute("data-theme") as "dark" | "light") ||
+      (localStorage.getItem("portfolio-theme") as "dark" | "light") ||
+      "dark";
+    setTheme(current);
+  }, []);
 
   // Intercept hard refresh shortcuts (Ctrl+Shift+R, Ctrl+F5, Shift+F5, F5/Fn+F5 with Shift)
   useEffect(() => {
@@ -389,9 +399,9 @@ export default function Home() {
   }, [isLastFrame, isAboutActive, isPortfolioActive]);
 
   // Skip button persists through splash screen, hero, and transition (including the last transition frame).
+  // It appears immediately from the 1st frame of the splash screen.
   // It is hidden on the About section, Portfolio/Creations section, and when a project is expanded.
   const isSkipButtonVisible =
-    isSplashReady &&
     !isPortfolioActive &&
     !isProjectLiveExpanded;
 
@@ -433,7 +443,7 @@ export default function Home() {
           onClick={handleScrollToExploreClick}
           className="fixed bottom-9 left-1/2 -translate-x-1/2 z-[56] animate-bounce pointer-events-auto cursor-pointer select-none transition-all duration-300 ease-out"
         >
-          <div className="flex flex-col items-center gap-1.5 text-neutral-900 hover:text-black transition-all hover:scale-105 active:scale-95 drop-shadow-sm">
+          <div className="flex flex-col items-center gap-1.5 text-neutral-900 hover:text-black transition-all hover:scale-105 active:scale-95 drop-shadow-sm hero-explore-hint">
             <span className="text-sm sm:text-base font-bold font-mono tracking-widest uppercase">
               Scroll to explore
             </span>
@@ -462,8 +472,8 @@ export default function Home() {
           {/* Left MetaBalls — 2 blobs, expansive contour rings */}
           <div className={`absolute left-[5vw] sm:left-[7vw] lg:left-[8.5vw] top-[11%] sm:top-[13%] md:top-[14%] w-[18vw] min-w-[140px] max-w-[250px] h-[360px] max-h-[46vh] ${!isAboutActive ? "pointer-events-auto" : "pointer-events-none"}`}>
             <MetaBalls
-              color="#000000"
-              cursorBallColor="#000000"
+              color={theme === "dark" ? "#ece2d2" : "#000000"}
+              cursorBallColor={theme === "dark" ? "#fbf6ec" : "#000000"}
               variant="contour"
               motion="lava"
               ballCount={2}
@@ -488,8 +498,8 @@ export default function Home() {
           {/* Right MetaBalls — 3 blobs, expansive contour rings */}
           <div className={`absolute right-[5vw] sm:right-[7vw] lg:right-[8.5vw] top-[15%] sm:top-[17%] md:top-[18%] w-[18vw] min-w-[140px] max-w-[250px] h-[360px] max-h-[46vh] ${!isAboutActive ? "pointer-events-auto" : "pointer-events-none"}`}>
             <MetaBalls
-              color="#000000"
-              cursorBallColor="#000000"
+              color={theme === "dark" ? "#ece2d2" : "#000000"}
+              cursorBallColor={theme === "dark" ? "#fbf6ec" : "#000000"}
               variant="contour"
               motion="lava"
               ballCount={3}
@@ -539,6 +549,7 @@ export default function Home() {
       {/* Interactive Pull-String Lamp Theme Toggle — visible once splash screen completes */}
       {isLastFrame && (
         <LampToggle
+          onThemeChange={setTheme}
           className={`right-12 sm:right-20 md:right-24 transition-opacity duration-500 ${isProjectLiveExpanded ? "opacity-0 pointer-events-none" : "opacity-100"
             }`}
         />
