@@ -69,8 +69,14 @@ export default function AboutTransition({
       // Lock target frame cleanly at the end
       targetFrameRef.current = TOTAL_FRAMES - 1;
       smoothFrameRef.current = TOTAL_FRAMES - 1;
+    } else if (isActive) {
+      // Returning to transition from Portfolio: ensure we are cleanly anchored at the last frame
+      if (targetFrameRef.current > TOTAL_FRAMES - 1) {
+        targetFrameRef.current = TOTAL_FRAMES - 1;
+      }
+      wakeAnimationRef.current?.();
     }
-  }, [isPortfolioActive]);
+  }, [isPortfolioActive, isActive]);
 
   const portfolioScrollPosRef = useRef(portfolioScrollPos);
   useEffect(() => {
@@ -148,6 +154,15 @@ export default function AboutTransition({
         TOTAL_FRAMES - 1,
         Math.max(0, Math.round(targetProgress * (TOTAL_FRAMES - 1)))
       );
+      // Guard against disrupting active backward wheel scrub near handoff frame (e.g. 104/105)
+      if (
+        frame >= TOTAL_FRAMES - 2 &&
+        targetFrameRef.current < TOTAL_FRAMES - 1 &&
+        smoothFrameRef.current < TOTAL_FRAMES - 1
+      ) {
+        onProgressChangeRef.current?.(targetProgress);
+        return;
+      }
       targetFrameRef.current = frame;
       smoothFrameRef.current = frame;
       lastDrawnFrameRef.current = frame;

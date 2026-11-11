@@ -1,0 +1,78 @@
+[
+  {
+    "index": 1,
+    "count": "(01)",
+    "title": "Branding that drives conversion & funding.",
+    "desc": "We clarify your positioning, define a distinctive tone of voice, and build a visual system that works across acquisition and product. Each sprint ships a robust logo, pragmatic brand guidelines, and a social kit so you can launch fast. The goal is simple: perceived value up.",
+    "bg_color": "background-color:hsla(246.88524590163937, 56.48%, 42.35%, 1.00)",
+    "quote": "Working with Brand Appart has been an absolute pleasure. Beyond their creativity and professionalism, there\u2019s a real sense of kindness and care in everything they do. The team is always open, generous, and never gets stuck on small details, they never say no. I was truly impressed by their reliability, flexibility, and collaborative spirit. I couldn\u2019t recommend them more!",
+    "author": {
+      "name": "J\u00e9r\u00e9my Bendayan",
+      "job": "Co-founder & COO @Jaws Group",
+      "pic": "/assets/brandappart/author_1.webp"
+    },
+    "gallery_imgs": [
+      "/assets/brandappart/card_1_img_1.webp",
+      "/assets/brandappart/card_1_img_2.webp",
+      "/assets/brandappart/card_1_img_3.webp",
+      "/assets/brandappart/card_1_img_4.webp",
+      "/assets/brandappart/card_1_img_5.webp"
+    ]
+  },
+  {
+    "index": 2,
+    "count": "(02)",
+    "title": "Product experiences users adopt & keep using",
+    "desc": "We start from business goals, map the critical journeys, and prototype what actually moves the needle. \u2028Every sprint ships clear flows, a reusable UI library, and a dev-ready. Expect time-to-value down, UX friction down, retention/NPS up.",
+    "bg_color": "background-color:#f72",
+    "quote": "A huge thank you to the entire Brand Appart team for your outstanding work on our rebranding! We\u2019re thrilled to have you as an integral part of the Incard team, and we can\u2019t wait to reveal what\u2019s coming next.",
+    "author": {
+      "name": "Th\u00e9o Cesarini",
+      "job": "CEO & Co-Founder @Incard & @Fundree",
+      "pic": "/assets/brandappart/author_2.webp"
+    },
+    "gallery_imgs": [
+      "/assets/brandappart/card_2_img_1.webp",
+      "/assets/brandappart/card_2_img_2.webp",
+      "/assets/brandappart/card_2_img_3.webp",
+      "/assets/brandappart/card_2_img_4.webp",
+      "/assets/brandappart/card_2_img_5.webp"
+    ]
+  },
+  {
+    "index": 3,
+    "count": "(03)",
+    "title": "Web Design for growing teams & business.",
+    "desc": "We align messaging, page architecture, and UI. You get clear structure, sections. The site loads fast, tells the right story, and pushes to action without dev firefighting. Your team gets a scalable base they can evolve without calling us for every change.",
+    "bg_color": "background-color:#ff3c34",
+    "quote": "I\u2019ve worked with Brand Appart on multiple projects website development, landing pages for branding, and PowerPoint presentations. I love how flexible, fast, and professional the team is. That speed and agility are exactly what we needed at Ircam Amplify.",
+    "author": {
+      "name": "Alexis Botaya",
+      "job": "Managing director @Sound Experience",
+      "pic": "/assets/brandappart/author_3.webp"
+    },
+    "gallery_imgs": [
+      "/assets/brandappart/card_3_img_1.webp",
+      "/assets/brandappart/card_3_img_2.webp",
+      "/assets/brandappart/card_3_img_3.webp",
+      "/assets/brandappart/card_3_img_4.webp",
+      "/assets/brandappart/card_3_img_5.webp"
+    ]
+  },
+  {
+    "index": 4,
+    "count": "(04)",
+    "title": "Investor-proof decks that raise faster.",
+    "desc": "We craft the narrative that gets meetings and a precise ask. Design serves the story: readable numbers, rhythm across slides, and versions for teaser/one-pager. Your deck can be pitched in 5 minutes, read solo, and generates faster responses.",
+    "bg_color": "background-color:#785f47",
+    "quote": "",
+    "author": {
+      "name": "",
+      "job": "",
+      "pic": ""
+    },
+    "gallery_imgs": [
+      "/assets/brandappart/card_4_img_1.webp"
+    ]
+  }
+]

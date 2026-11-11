@@ -53,15 +53,20 @@ export default function RocketBoostSkip({
     onSkip();
   }, [triggerHaptics, onSkip]);
 
-  if (!isVisible) return null;
-
   return (
     <div
-      className="fixed inset-0 z-[60] pointer-events-none transition-opacity duration-300 opacity-100"
+      aria-hidden={!isVisible}
+      className={`fixed inset-0 z-[60] pointer-events-none ${
+        isVisible ? "opacity-100 visible" : "opacity-0 invisible"
+      }`}
     >
       <button
+        type="button"
+        tabIndex={isVisible ? 0 : -1}
         onClick={handleClick}
-        className="absolute cursor-pointer pointer-events-auto transition-transform duration-200 hover:scale-105 active:scale-95"
+        className={`absolute hover:scale-105 active:scale-95 transition-transform duration-200 ${
+          isVisible ? "cursor-pointer pointer-events-auto" : "pointer-events-none"
+        }`}
         style={isMobile ? mobileSkipStyle : desktopSkipStyle}
         aria-label="Skip to next section"
       >
@@ -71,6 +76,8 @@ export default function RocketBoostSkip({
             alt="Skip"
             fill
             priority
+            loading="eager"
+            decoding="sync"
             unoptimized
             className="object-contain render-high-quality"
           />

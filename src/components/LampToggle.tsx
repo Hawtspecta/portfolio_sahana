@@ -36,6 +36,11 @@ export default function LampToggle({
     const initialTheme = saved || defaultTheme;
     setTheme(initialTheme);
     document.documentElement.setAttribute("data-theme", initialTheme);
+    if (initialTheme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
     setTimeout(() => {
       onThemeChangeRef.current?.(initialTheme);
     }, 0);
@@ -88,6 +93,11 @@ export default function LampToggle({
     setTheme((prev) => {
       const next = prev === "dark" ? "light" : "dark";
       document.documentElement.setAttribute("data-theme", next);
+      if (next === "dark") {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
       localStorage.setItem("portfolio-theme", next);
       return next;
     });

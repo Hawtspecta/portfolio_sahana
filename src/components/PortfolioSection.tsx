@@ -8,10 +8,13 @@ import ScrollExpand, { ScrollExpandHandle } from "@/components/ScrollExpand";
 import MagicBento from "@/components/MagicBento";
 import { getMagicBentoItems } from "@/data/projectData";
 import Dock, { DockItemData } from "@/components/Dock";
+import WhatWeShipSection from "@/components/WhatWeShipSection";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  CodeIcon,
   Folder01Icon,
   Home01Icon,
+  Layers01Icon,
   Mail01Icon,
   MusicNote03Icon,
   UserCircle02Icon,
@@ -85,6 +88,104 @@ const PROJECT_ITEMS = [
   },
 ];
 
+function ProjectsIntroHeadline({ animKey }: { animKey: number }) {
+  const quoteWords = ["Mmm...", "let's", "see", "what", "she's", "been", "cooking."];
+
+  let charCount = 0;
+
+  return (
+    <div key={animKey} className="flex flex-col items-center text-center select-none max-w-3xl mx-auto px-4">
+      <style>{`
+        @keyframes projCharPop {
+          0% {
+            opacity: 0;
+            transform: translateY(16px) scale(0.88);
+            filter: blur(6px);
+          }
+          65% {
+            opacity: 1;
+            transform: translateY(-2px) scale(1.03);
+            filter: blur(0px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0px) scale(1);
+            filter: blur(0px);
+          }
+        }
+
+        .proj-typewriter-char {
+          opacity: 0;
+          animation: projCharPop 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        @keyframes projCaretBlink {
+          0%, 45% {
+            opacity: 0.85;
+          }
+          50%, 95% {
+            opacity: 0;
+          }
+          100% {
+            opacity: 0.85;
+          }
+        }
+
+        .proj-typewriter-caret {
+          opacity: 0;
+          animation: projCharPop 0.3s ease-out forwards, projCaretBlink 0.9s step-end infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .proj-typewriter-char,
+          .proj-typewriter-caret {
+            opacity: 1 !important;
+            transform: none !important;
+            filter: none !important;
+            animation: none !important;
+          }
+        }
+      `}</style>
+
+      <h2
+        className="text-3xl sm:text-4xl md:text-5xl lg:text-[3.35rem] font-extrabold leading-[1.15] tracking-normal transition-colors duration-500 drop-shadow-sm"
+        style={{
+          fontFamily: "'Special Elite', cursive",
+          color: "var(--exp-headline-color, #2b180e)",
+          textShadow: "var(--exp-text-shadow, none)",
+        }}
+      >
+        {quoteWords.map((word, wIdx) => (
+          <span key={`pq-${wIdx}`} className="inline-block whitespace-nowrap mx-[0.18em]">
+            {word.split("").map((char, cIdx) => {
+              const delay = 140 + charCount * 26;
+              charCount++;
+              return (
+                <span
+                  key={`pqc-${cIdx}`}
+                  className="inline-block will-change-transform will-change-opacity proj-typewriter-char"
+                  style={{ animationDelay: `${delay}ms` }}
+                >
+                  {char}
+                </span>
+              );
+            })}
+          </span>
+        ))}
+        <span
+          className="inline-block ml-1 font-normal opacity-80 proj-typewriter-caret"
+          style={{
+            color: "var(--exp-caret-color, #2b180e)",
+            animationDelay: `${180 + charCount * 26}ms`,
+          }}
+        >
+          _
+        </span>
+      </h2>
+    </div>
+  );
+}
+
 export default function PortfolioSection({
   isActive,
   externalScrollProgress,
@@ -99,6 +200,13 @@ export default function PortfolioSection({
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [selectedProject, setSelectedProject] = useState<typeof PROJECT_ITEMS[0] | null>(null);
   const [currentTab, setCurrentTab] = useState(0);
+  const [projectsStage, setProjectsStage] = useState<"intro" | "carousel">("intro");
+  const projectsStageRef = useRef<"intro" | "carousel">("intro");
+  useEffect(() => {
+    projectsStageRef.current = projectsStage;
+  }, [projectsStage]);
+  const [sectionZone, setSectionZone] = useState<"experience" | "skills">("experience");
+  const [whatWeShipStopRequest, setWhatWeShipStopRequest] = useState<{ stop: number; id: number } | null>(null);
   const [expandProgress, setExpandProgress] = useState(0);
   const initialExpandedRef = useRef(false);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
@@ -148,12 +256,49 @@ const [prevActive, setPrevActive] = useState(isActive);
 
 const hitRef = useRef<HTMLDivElement>(null);
 const videoRef = useRef<HTMLVideoElement>(null);
+const [pcVideoSrc, setPcVideoSrc] = useState("/assets/transition/pc_click.mp4");
+const pcVideoBlobUrlRef = useRef<string | null>(null);
+const isVideoPlayingRef = useRef(false);
 const enteredTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-// Vertical scroll state: 0 = at PC (About Me), 1 = at Creations (MY CREATIONS.EXE)
+useEffect(() => {
+  isVideoPlayingRef.current = isVideoPlaying;
+}, [isVideoPlaying]);
+
+// Pre-buffer full pc_click.mp4 (moov atom sits at EOF) into an in-memory Blob URL so 1st click plays with zero range-request stalls
+useEffect(() => {
+  let cancelled = false;
+  const controller = new AbortController();
+
+  const timer = setTimeout(() => {
+    fetch("/assets/transition/pc_click.mp4", { signal: controller.signal })
+      .then((res) => (res.ok ? res.blob() : null))
+      .then((blob) => {
+        if (cancelled || !blob) return;
+        const objectUrl = URL.createObjectURL(blob);
+        pcVideoBlobUrlRef.current = objectUrl;
+        if (!isVideoPlayingRef.current) {
+          setPcVideoSrc(objectUrl);
+        }
+      })
+      .catch(() => {});
+  }, 400);
+
+  return () => {
+    cancelled = true;
+    clearTimeout(timer);
+    controller.abort();
+    if (pcVideoBlobUrlRef.current) {
+      URL.revokeObjectURL(pcVideoBlobUrlRef.current);
+      pcVideoBlobUrlRef.current = null;
+    }
+  };
+}, []);
+
+// Vertical scroll state: 0 = at PC (About Me), 1 = at Creations (MY CREATIONS.EXE), 2 = at What We Ship
 const [scrollPos, setScrollPos] = useState(() => {
   if (externalScrollProgress != null) {
-    return externalScrollProgress >= 0.5 ? 1 : 0;
+    return externalScrollProgress >= 1.4 ? 2 : externalScrollProgress >= 0.5 ? 1 : 0;
   }
   return 0;
 });
@@ -186,7 +331,12 @@ useEffect(() => {
         }
         setScrollPos(1);
         scrollPosRef.current = 1;
+        setProjectsStage("carousel");
+        projectsStageRef.current = "carousel";
       }
+    } else if (saved.section === "services" || saved.portfolioScrollProgress >= 1.5) {
+      setScrollPos(2);
+      scrollPosRef.current = 2;
     } else if (saved.section === "projects") {
       setScrollPos(1);
       scrollPosRef.current = 1;
@@ -196,7 +346,7 @@ useEffect(() => {
     }
   } catch { }
 }, []);
-const [resistanceOffset, setResistanceOffset] = useState(0);
+const [servicesCardIndex, setServicesCardIndex] = useState(0);
 const arrivalLockUntilRef = useRef(0);
 const aboutArrivalCooldownUntilRef = useRef(0);
 const hasStoppedAtAboutRef = useRef(false);
@@ -204,7 +354,7 @@ const scrollDownAccumulatorRef = useRef(0);
 const scrollDownResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 const scrollUpAccumulatorRef = useRef(0);
 const scrollUpResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+const scrollDownToServicesAccumulatorRef = useRef(0);
 
 const onPortfolioProgressChangeRef = useRef(onPortfolioProgressChange);
 useEffect(() => {
@@ -249,26 +399,31 @@ useEffect(() => {
   isFirstMountRef.current = false;
 }, []);
 
-// Sync external scrollbar target progress (0.0 to 1.0)
+// Sync external scrollbar target progress (0.0 to 2.0)
 const [prevExternalProgress, setPrevExternalProgress] = useState(externalScrollProgress);
 if (externalScrollProgress !== prevExternalProgress) {
   setPrevExternalProgress(externalScrollProgress);
   if (externalScrollProgress != null && isActive) {
-    const nextPos = externalScrollProgress >= 0.5 ? 1 : 0;
-    if (nextPos === 1 && scrollPos === 0 && !isFirstMountRef.current) {
+    const nextPos = externalScrollProgress >= 1.4 ? 2 : externalScrollProgress >= 0.5 ? 1 : 0;
+    if (nextPos >= 1 && scrollPos === 0 && !isFirstMountRef.current) {
       arrivalLockUntilRef.current = Date.now() + 600;
     }
-    if (nextPos === 1) {
+    if (nextPos >= 1) {
       hasStoppedAtAboutRef.current = true;
     }
     setScrollPos(nextPos);
   }
 }
 
-const updateScrollPos = useCallback((newPos: number) => {
+const updateScrollPos = useCallback((newPos: number, nextProjectsStage?: "intro" | "carousel") => {
   scrollPosRef.current = newPos;
+  if (newPos >= 1) {
+    arrivalLockUntilRef.current = Date.now() + 650;
+  }
   if (newPos === 1) {
-    arrivalLockUntilRef.current = Date.now() + 600;
+    const stage = nextProjectsStage ?? "intro";
+    projectsStageRef.current = stage;
+    setProjectsStage(stage);
   }
   setScrollPos(newPos);
   onPortfolioProgressChangeRef.current?.(newPos);
@@ -283,12 +438,46 @@ const handleScrollUpToAbout = useCallback(() => {
 
   // Switch to About section (Section 0)
   updateScrollPos(0);
-  // Compulsorily stop at About: absorb any residual momentum of this swipe for 850ms
-  aboutArrivalCooldownUntilRef.current = Date.now() + 850;
+  // Brief cooldown so incoming swipe momentum doesn't skip past About immediately
+  aboutArrivalCooldownUntilRef.current = Date.now() + 450;
   scrollDownAccumulatorRef.current = 0;
   scrollUpAccumulatorRef.current = 0;
-  setResistanceOffset(0);
 }, [updateScrollPos]);
+
+const enterProjectsCarousel = useCallback(() => {
+  projectsStageRef.current = "carousel";
+  setProjectsStage("carousel");
+  arrivalLockUntilRef.current = Date.now() + 650;
+  scrollDownToServicesAccumulatorRef.current = 0;
+}, []);
+
+const handleScrollUpFromCarousel = useCallback(() => {
+  if (projectsStageRef.current === "intro") {
+    handleScrollUpToAbout();
+    return;
+  }
+  projectsStageRef.current = "intro";
+  setProjectsStage("intro");
+  arrivalLockUntilRef.current = Date.now() + 650;
+}, [handleScrollUpToAbout]);
+
+const isProjectsIntroVisible = isActive && scrollPos === 1 && projectsStage === "intro";
+const [projectsIntroAnimKey, setProjectsIntroAnimKey] = useState(0);
+const [prevProjectsIntroVisible, setPrevProjectsIntroVisible] = useState(false);
+if (isProjectsIntroVisible !== prevProjectsIntroVisible) {
+  setPrevProjectsIntroVisible(isProjectsIntroVisible);
+  if (isProjectsIntroVisible) {
+    setProjectsIntroAnimKey((prev) => prev + 1);
+  }
+}
+
+const jumpToWhatWeShipStop = useCallback(
+  (stop: number) => {
+    updateScrollPos(2);
+    setWhatWeShipStopRequest({ stop, id: Date.now() + Math.random() });
+  },
+  [updateScrollPos]
+);
 
 const glyph = useCallback((icon: any) => <HugeiconsIcon icon={icon} size="1.25em" strokeWidth={1.8} />, []);
 const [isMusicActive, setIsMusicActive] = useState(true);
@@ -304,7 +493,9 @@ const dockItems: DockItemData[] = useMemo(() => [
       { label: 'Hero (1st Frame)', onClick: () => onScrollToHeroStart?.() },
       { separator: true },
       { label: "Who's Behind the Screen", onClick: () => updateScrollPos(0) },
-      { label: 'My Creations.exe (5 Projects)', onClick: () => updateScrollPos(1) },
+      { label: 'My Creations.exe (5 Projects)', onClick: () => updateScrollPos(1, "carousel") },
+      { label: 'My Experience (2 Roles)', onClick: () => jumpToWhatWeShipStop(2.2) },
+      { label: 'My Toolkit (4 Skill Folders)', onClick: () => jumpToWhatWeShipStop(7.2) },
     ]
   },
   {
@@ -319,6 +510,8 @@ const dockItems: DockItemData[] = useMemo(() => [
       { separator: true },
       { label: 'Back to Hero', onClick: () => onScrollToHeroStart?.() },
       { label: 'Go to My Creations (5)', onClick: () => updateScrollPos(1) },
+      { label: 'Go to Experience (2)', onClick: () => jumpToWhatWeShipStop(2.2) },
+      { label: 'Go to Skills (4)', onClick: () => jumpToWhatWeShipStop(7.2) },
     ]
   },
   {
@@ -330,13 +523,50 @@ const dockItems: DockItemData[] = useMemo(() => [
       updateScrollPos(1);
     },
     menu: [
-      { label: 'My Creations.exe (5 Projects)', onClick: () => updateScrollPos(1) },
+      { label: 'My Creations.exe (5 Projects)', onClick: () => updateScrollPos(1, "carousel") },
       { separator: true },
-      { label: '1. AI Law Bot', onClick: () => { updateScrollPos(1); setCurrentTab(0); } },
-      { label: '2. UFI Platform', onClick: () => { updateScrollPos(1); setCurrentTab(1); } },
-      { label: '3. Urban Brew', onClick: () => { updateScrollPos(1); setCurrentTab(2); } },
-      { label: '4. India Connect Hub', onClick: () => { updateScrollPos(1); setCurrentTab(3); } },
-      { label: '5. AI Resume Analyzer', onClick: () => { updateScrollPos(1); setCurrentTab(4); } },
+      { label: '1. AI Law Bot', onClick: () => { updateScrollPos(1, "carousel"); setCurrentTab(0); } },
+      { label: '2. UFI Platform', onClick: () => { updateScrollPos(1, "carousel"); setCurrentTab(1); } },
+      { label: '3. Urban Brew', onClick: () => { updateScrollPos(1, "carousel"); setCurrentTab(2); } },
+      { label: '4. India Connect Hub', onClick: () => { updateScrollPos(1, "carousel"); setCurrentTab(3); } },
+      { label: '5. AI Resume Analyzer', onClick: () => { updateScrollPos(1, "carousel"); setCurrentTab(4); } },
+    ]
+  },
+  {
+    icon: glyph(Layers01Icon),
+    label: 'Experience',
+    badge: 2,
+    active: scrollPos === 2 && sectionZone === "experience",
+    onClick: () => {
+      if (sectionZone === "skills") {
+        jumpToWhatWeShipStop(2.2);
+      } else {
+        updateScrollPos(2);
+      }
+    },
+    menu: [
+      { label: 'My Experience (2 Roles)', onClick: () => jumpToWhatWeShipStop(2.2) },
+      { separator: true },
+      { label: '01. InVizn — AI/ML Intern', onClick: () => jumpToWhatWeShipStop(2.2) },
+      { label: '02. Freelance — Web Developer', onClick: () => jumpToWhatWeShipStop(3.2) },
+      { label: '03. Leadership & Initiatives', onClick: () => jumpToWhatWeShipStop(5.2) },
+    ]
+  },
+  {
+    icon: glyph(CodeIcon),
+    label: 'Skills',
+    badge: 4,
+    active: scrollPos === 2 && sectionZone === "skills",
+    onClick: () => {
+      jumpToWhatWeShipStop(7.2);
+    },
+    menu: [
+      { label: 'My Toolkit (4 Folders)', onClick: () => jumpToWhatWeShipStop(7.2) },
+      { separator: true },
+      { label: '01. Programming', onClick: () => jumpToWhatWeShipStop(7.2) },
+      { label: '02. Frontend', onClick: () => jumpToWhatWeShipStop(7.2) },
+      { label: '03. Backend', onClick: () => jumpToWhatWeShipStop(7.2) },
+      { label: '04. AI / ML', onClick: () => jumpToWhatWeShipStop(7.2) },
     ]
   },
   { separator: true },
@@ -363,7 +593,7 @@ const dockItems: DockItemData[] = useMemo(() => [
       { label: isMusicActive ? 'Mute Sound' : 'Play Sound', onClick: () => setIsMusicActive(prev => !prev) }
     ]
   }
-], [glyph, scrollPos, isMusicActive, onScrollToHeroStart, updateScrollPos, setCurrentTab]);
+], [glyph, scrollPos, sectionZone, isMusicActive, onScrollToHeroStart, updateScrollPos, jumpToWhatWeShipStop, setCurrentTab]);
 
 // Restart starting wobble and reset section states whenever active state changes
 if (isActive !== prevActive) {
@@ -373,18 +603,19 @@ if (isActive !== prevActive) {
     // Guarantee starting at Section 0 (WHO'S BEHIND THE SCREEN?) unless external target requested
     if (externalScrollProgress == null) {
       setScrollPos(0);
+      setProjectsStage("intro");
     }
     // Compulsory pit stop at About: cushion and absorb all incoming transition scroll momentum for 850ms
     aboutArrivalCooldownUntilRef.current = Date.now() + 850;
     hasStoppedAtAboutRef.current = false;
     scrollDownAccumulatorRef.current = 0;
     scrollUpAccumulatorRef.current = 0;
-    setResistanceOffset(0);
   } else {
     setEntered(false);
     setIsHovered(false);
     setIsVideoPlaying(false);
     setScrollPos(0);
+    setProjectsStage("intro");
     hasStoppedAtAboutRef.current = false;
   }
 }
@@ -429,6 +660,7 @@ const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
 }, []);
 
 const handlePcClick = useCallback(() => {
+  isVideoPlayingRef.current = true;
   setIsVideoPlaying(true);
   const video = videoRef.current;
   if (video) {
@@ -438,10 +670,14 @@ const handlePcClick = useCallback(() => {
 }, []);
 
 const handleCloseVideo = useCallback(() => {
+  isVideoPlayingRef.current = false;
   setIsVideoPlaying(false);
   const video = videoRef.current;
   if (video) {
     video.pause();
+  }
+  if (pcVideoBlobUrlRef.current) {
+    setPcVideoSrc(pcVideoBlobUrlRef.current);
   }
   try {
     const existingRaw = sessionStorage.getItem("portfolio_saved_state");
@@ -492,7 +728,6 @@ const handleCloseProject = useCallback(() => {
   arrivalLockUntilRef.current = Date.now() + 500;
   scrollDownAccumulatorRef.current = 0;
   scrollUpAccumulatorRef.current = 0;
-  setResistanceOffset(0);
   // Guarantee screen stays on Creations (MY CREATIONS.EXE) if that's where the tab was opened
   if (scrollPosRef.current === 1) {
     updateScrollPos(1);
@@ -524,7 +759,7 @@ useEffect(() => {
       }
     }
 
-    if (isVideoPlaying || selectedProject) return;
+    if (isVideoPlaying || selectedProject || scrollPos === 2) return;
 
     if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === "ArrowRight") {
       if (scrollPos === 0) {
@@ -534,12 +769,26 @@ useEffect(() => {
         hasStoppedAtAboutRef.current = true;
         updateScrollPos(1);
       } else if (scrollPos === 1) {
-        carouselRef.current?.step(1);
+        if (projectsStage === "intro") {
+          if (Date.now() < arrivalLockUntilRef.current) {
+            return;
+          }
+          enterProjectsCarousel();
+        } else if (currentTab >= PROJECT_ITEMS.length - 1) {
+          updateScrollPos(2);
+        } else {
+          carouselRef.current?.step(1);
+        }
       }
     } else if (e.key === "ArrowUp" || e.key === "PageUp" || e.key === "ArrowLeft") {
       if (scrollPos === 1) {
-        if (currentTab <= 0) {
+        if (projectsStage === "intro") {
+          if (Date.now() < arrivalLockUntilRef.current) {
+            return;
+          }
           handleScrollUpToAbout();
+        } else if (currentTab <= 0) {
+          handleScrollUpFromCarousel();
         } else {
           carouselRef.current?.step(-1);
         }
@@ -554,7 +803,7 @@ useEffect(() => {
 
   window.addEventListener("keydown", handleKeyDown);
   return () => window.removeEventListener("keydown", handleKeyDown);
-}, [isActive, isVideoPlaying, selectedProject, expandProgress, isInfoOpen, scrollPos, currentTab, updateScrollPos, handleScrollUpToAbout, handleCloseVideo, handleCloseProject]);
+}, [isActive, isVideoPlaying, selectedProject, expandProgress, isInfoOpen, scrollPos, projectsStage, currentTab, updateScrollPos, enterProjectsCarousel, handleScrollUpFromCarousel, handleScrollUpToAbout, handleCloseVideo, handleCloseProject]);
 
 // Wheel listener: smooth natural scroll between About and Creations
 const handleWheel = useCallback(
@@ -564,20 +813,11 @@ const handleWheel = useCallback(
     }
 
     if (scrollPos === 0) {
-      // In About section: scrolling down requires deliberate scroll resistance to enter Creations
+      // In About section: responsive scroll thresholds with zero rubber-band bounce-back
       if (e.deltaY > 0) {
         e.stopPropagation();
 
-        // 1. Initial arrival cooldown:
-        // Absorb all incoming momentum from the transition so user doesn't accidentally skip About
         if (Date.now() < aboutArrivalCooldownUntilRef.current) {
-          // Gentle micro-tension spring
-          const tension = Math.min(18, Math.abs(e.deltaY) * 0.05);
-          setResistanceOffset(tension);
-          if (scrollDownResetTimeoutRef.current) clearTimeout(scrollDownResetTimeoutRef.current);
-          scrollDownResetTimeoutRef.current = setTimeout(() => {
-            setResistanceOffset(0);
-          }, 300);
           return;
         }
 
@@ -586,42 +826,23 @@ const handleWheel = useCallback(
           scrollDownResetTimeoutRef.current = null;
         }
 
-        // 2. Deliberate scroll resistance (smooth rubber-band):
-        // On first visit, require a conscious, deliberate scroll down (threshold 480).
-        // Once user has stopped and seen About, threshold is easy & natural (320).
-        const requiredThreshold = !hasStoppedAtAboutRef.current ? 480 : 320;
-
+        const requiredThreshold = !hasStoppedAtAboutRef.current ? 160 : 100;
         scrollDownAccumulatorRef.current += e.deltaY;
 
         if (scrollDownAccumulatorRef.current >= requiredThreshold) {
           hasStoppedAtAboutRef.current = true;
           scrollDownAccumulatorRef.current = 0;
-          setResistanceOffset(0);
           updateScrollPos(1);
         } else {
-          // Tangible rubber-band visual tension indicating active smooth resistance
-          const tension = Math.min(42, (scrollDownAccumulatorRef.current / requiredThreshold) * 42);
-          setResistanceOffset(tension);
-
           scrollDownResetTimeoutRef.current = setTimeout(() => {
             scrollDownAccumulatorRef.current = 0;
-            setResistanceOffset(0);
           }, 450);
         }
       } else if (e.deltaY < 0) {
-        // In About section (WHO'S BEHIND THE SCREEN?):
         e.stopPropagation();
         scrollDownAccumulatorRef.current = 0;
 
-        // 1. Initial arrival cooldown:
-        // Absorb all incoming upward momentum from the swipe so user compulsorily stops at About
         if (Date.now() < aboutArrivalCooldownUntilRef.current) {
-          const tension = Math.min(18, Math.abs(e.deltaY) * 0.05);
-          setResistanceOffset(-tension);
-          if (scrollUpResetTimeoutRef.current) clearTimeout(scrollUpResetTimeoutRef.current);
-          scrollUpResetTimeoutRef.current = setTimeout(() => {
-            setResistanceOffset(0);
-          }, 300);
           return;
         }
 
@@ -630,47 +851,61 @@ const handleWheel = useCallback(
           scrollUpResetTimeoutRef.current = null;
         }
 
-        // 2. Compulsory pit stop at About:
-        // Moving up from About back to transition frames requires a conscious, deliberate upward scroll (threshold -280)
-        const REQUIRED_UP_THRESHOLD = -280;
+        const REQUIRED_UP_THRESHOLD = -120;
         scrollUpAccumulatorRef.current += e.deltaY;
 
         if (scrollUpAccumulatorRef.current <= REQUIRED_UP_THRESHOLD) {
           scrollUpAccumulatorRef.current = 0;
-          setResistanceOffset(0);
           onScrollBackToTransitionRef.current?.();
         } else {
-          // Elastic upward rubber-band tension visual feedback
-          const tension = Math.min(36, (Math.abs(scrollUpAccumulatorRef.current) / Math.abs(REQUIRED_UP_THRESHOLD)) * 36);
-          setResistanceOffset(-tension);
-
           scrollUpResetTimeoutRef.current = setTimeout(() => {
             scrollUpAccumulatorRef.current = 0;
-            setResistanceOffset(0);
           }, 450);
         }
       }
-    } else {
-      // In Creations section (MY CREATIONS.EXE):
-      // Allow wheel anywhere on screen (including the brown horizon desk bar and margins)
-      // to naturally step through project tabs, and return to About only when scrolling up from Tab 0.
+    } else if (scrollPos === 1) {
+      // In Creations section (Projects Intro -> MY CREATIONS.EXE):
       e.stopPropagation();
       scrollDownAccumulatorRef.current = 0;
       scrollUpAccumulatorRef.current = 0;
-      setResistanceOffset(0);
 
       if (Date.now() < arrivalLockUntilRef.current) {
         return;
       }
 
+      if (projectsStage === "intro") {
+        // Next scroll down compulsorily enters the horizontal project tabs; scroll up goes back to About
+        if (e.deltaY > 10) {
+          enterProjectsCarousel();
+        } else if (e.deltaY < -10) {
+          handleScrollUpToAbout();
+        }
+        return;
+      }
+
+      // If at the 5th tab (Tab 4: AI Resume Analyzer) and user scrolls DOWN, transition to Section 3 (What We Ship)
+      if (currentTab >= PROJECT_ITEMS.length - 1 && e.deltaY > 10) {
+        scrollDownToServicesAccumulatorRef.current += e.deltaY;
+        if (scrollDownToServicesAccumulatorRef.current >= 35) {
+          scrollDownToServicesAccumulatorRef.current = 0;
+          updateScrollPos(2);
+        }
+        return;
+      } else {
+        scrollDownToServicesAccumulatorRef.current = 0;
+      }
+
       if (carouselRef.current) {
         carouselRef.current.handleWheel(e);
       } else if (e.deltaY < -8) {
-        handleScrollUpToAbout();
+        handleScrollUpFromCarousel();
       }
+    } else if (scrollPos === 2) {
+      // In Section 3: What We Ship
+      e.stopPropagation();
     }
   },
-  [isActive, isVideoPlaying, selectedProject, scrollPos, updateScrollPos, handleScrollUpToAbout]
+  [isActive, isVideoPlaying, selectedProject, scrollPos, projectsStage, currentTab, updateScrollPos, enterProjectsCarousel, handleScrollUpFromCarousel, handleScrollUpToAbout]
 );
 
 // Hardware-accelerated CSS radial mask: creates a soft, organic clearing in the green matrix glitch around About Me text
@@ -693,8 +928,8 @@ const tiltY = isHovered && !showVideo ? (mousePos.x - 0.5) * 6 : 0;
 return (
   <div
     className={`fixed inset-0 z-[51] w-full h-full overflow-hidden select-none transition-opacity duration-500 ease-out ${isActive
-      ? "opacity-100 pointer-events-auto visible"
-      : "opacity-0 pointer-events-none invisible"
+      ? "opacity-100 pointer-events-auto"
+      : "opacity-0 pointer-events-none"
       }`}
     onWheel={isActive ? handleWheel : undefined}
   >
@@ -736,12 +971,9 @@ return (
     {/* Strictly bounded between top and the brown horizon bar (0% to 92%). Nothing ever crosses onto the horizon! */}
     <div className="absolute top-0 left-0 right-0 h-[92%] overflow-hidden z-10">
       <div
-        className={`w-full h-full will-change-transform ${Math.abs(resistanceOffset) > 0
-          ? "transition-transform duration-100 ease-out"
-          : "transition-transform duration-600 ease-out"
-          }`}
+        className="w-full h-full will-change-transform transition-transform duration-600 ease-out"
         style={{
-          transform: `translate3d(0, calc(-${scrollPos * 100}% - ${resistanceOffset}px), 0)`,
+          transform: `translate3d(0, -${scrollPos * 100}%, 0)`,
         }}
       >
         {/* ═══════════════════════════════════════════════════════════════ */}
@@ -799,6 +1031,61 @@ return (
             />
           )}
 
+          {/* Soft rhythmic hint paired with the 10s PC wobble */}
+          {scrollPos === 0 && (
+            <div
+              className={`pointer-events-none absolute z-10 transition-opacity duration-500 ease-out ${
+                showEntered && !showVideo && !isHovered
+                  ? "opacity-100"
+                  : "opacity-0"
+              }`}
+              style={{
+                left: `${PC_LEFT + PC_WIDTH / 2}%`,
+                top: "15.5%",
+              }}
+            >
+              <button
+                type="button"
+                onClick={handlePcClick}
+                className={`pc-click-hint inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs sm:text-[13px] tracking-wide backdrop-blur-md transition-transform duration-200 hover:scale-105 ${
+                  showEntered && !showVideo && !isHovered
+                    ? "pointer-events-auto cursor-pointer"
+                    : "pointer-events-none"
+                }`}
+                style={{ fontFamily: "'Special Elite', cursive" }}
+              >
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M5 3l14 9-6 1.8-3.2 5.7L5 3z" />
+                </svg>
+                <span>Click the PC</span>
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  className="opacity-75"
+                >
+                  <path d="M12 5v14M6 13l6 6 6-6" />
+                </svg>
+              </button>
+            </div>
+          )}
+
           {/* About Me Text Animation on the right of PC */}
           <div
             className={`absolute right-[5vw] lg:right-[7vw] top-[18%] sm:top-[22%] lg:top-[47%] lg:-translate-y-1/2 w-[42vw] min-w-[290px] max-w-[560px] pointer-events-auto transition-all duration-700 ease-out ${showEntered && !showVideo
@@ -839,117 +1126,193 @@ return (
         </div>
 
         {/* ═══════════════════════════════════════════════════════════════ */}
-        {/* SECTION 2: MY CREATIONS.EXE (Directly below Section 1)          */}
+        {/* SECTION 2: PROJECTS INTRO -> MY CREATIONS.EXE                   */}
         {/* ═══════════════════════════════════════════════════════════════ */}
-        <div className={`relative w-full h-full overflow-hidden flex flex-col items-center justify-start pt-10 sm:pt-14 md:pt-16 lg:pt-20 pb-2 px-4 sm:px-8 ${isActive && scrollPos === 1 ? "pointer-events-auto" : "pointer-events-none"}`}>
+        <div className={`relative w-full h-full overflow-hidden ${isActive && scrollPos === 1 ? "pointer-events-auto" : "pointer-events-none"}`}>
+          {/* 2A. Text Reveal Interlude: "Mmm... let's see what she's been cooking." */}
+          <div
+            className={`absolute inset-0 z-20 flex flex-col items-center justify-center px-6 sm:px-10 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${projectsStage === "intro"
+              ? "opacity-100 translate-y-0 pointer-events-auto"
+              : "opacity-0 -translate-y-full pointer-events-none"
+              }`}
+          >
+            <ProjectsIntroHeadline animKey={projectsIntroAnimKey} />
 
-          {/* Heading: MY CREATIONS.EXE (Left-aligned with tabs/ribbons, tight gap below) */}
-          <div className="relative z-10 w-[78vw] max-w-[1460px] mx-auto flex flex-col items-start justify-start text-left mt-0 mb-0">
-            <h2
-              className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-neutral-900 drop-shadow-sm mb-1 creations-heading transition-colors duration-500"
-              style={{ fontFamily: "'Special Elite', cursive" }}
-            >
-              MY CREATIONS.EXE
-            </h2>
-            <p
-              className="text-xs sm:text-sm text-neutral-800/80 font-mono tracking-wide creations-subheading transition-colors duration-500"
-              style={{ fontFamily: "'Special Elite', cursive" }}
-            >
-              Explore projects in horizontal liquid view &bull; Click to expand
-            </p>
-          </div>
-
-          {/* FlexCarousel with 5 tabs (Exact width between ribbons, large tabs, cloud blur at disappearing ends) */}
-          <div className="relative z-10 w-full flex items-center justify-center -mt-16 sm:-mt-20 md:-mt-24">
-            <div
-              className="w-[82vw] max-w-[1520px] h-[540px] sm:h-[580px] lg:h-[620px] relative mx-auto overflow-hidden"
-              onWheel={(e) => {
-                e.stopPropagation();
-                if (Date.now() < arrivalLockUntilRef.current) {
-                  e.preventDefault();
-                }
+            <button
+              type="button"
+              onClick={enterProjectsCarousel}
+              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full hover:scale-105 transition-all duration-300 cursor-pointer shadow-sm mt-7 animate-bounce"
+              style={{
+                fontFamily: "'Special Elite', cursive",
+                color: "var(--exp-pill-color, #2b180e)",
+                borderColor: "var(--exp-pill-border, #2b180e)",
+                borderWidth: "1.5px",
+                borderStyle: "solid",
+                backgroundColor: "var(--exp-pill-bg, rgba(43, 24, 14, 0.08))",
               }}
             >
-              {/* Left Side Blur - Only visible when not on first tab, smoothly merges into background */}
-              <div
-                className={`absolute left-0 top-1/2 -translate-y-1/2 h-[58%] w-10 sm:w-12 md:w-14 z-20 pointer-events-none select-none rounded-r-xl transition-opacity duration-300 ${currentTab > 0 ? "opacity-100" : "opacity-0"
-                  }`}
-                style={{
-                  backdropFilter: "blur(10px)",
-                  WebkitBackdropFilter: "blur(10px)",
-                  maskImage:
-                    "linear-gradient(to right, black 0%, rgba(0,0,0,0.5) 60%, transparent 100%)",
-                  WebkitMaskImage:
-                    "linear-gradient(to right, black 0%, rgba(0,0,0,0.5) 60%, transparent 100%)",
-                }}
-              />
+              <span>Scroll down to see</span>
+              <span>↓</span>
+            </button>
+          </div>
 
-              {/* Right Side Blur - Only visible when not on last tab, smoothly merges into background */}
-              <div
-                className={`absolute right-0 top-1/2 -translate-y-1/2 h-[58%] w-10 sm:w-12 md:w-14 z-20 pointer-events-none select-none rounded-l-xl transition-opacity duration-300 ${currentTab < PROJECT_ITEMS.length - 1 ? "opacity-100" : "opacity-0"
-                  }`}
-                style={{
-                  backdropFilter: "blur(10px)",
-                  WebkitBackdropFilter: "blur(10px)",
-                  maskImage:
-                    "linear-gradient(to left, black 0%, rgba(0,0,0,0.5) 60%, transparent 100%)",
-                  WebkitMaskImage:
-                    "linear-gradient(to left, black 0%, rgba(0,0,0,0.5) 60%, transparent 100%)",
-                }}
-              />
+          {/* 2B. Horizontal Project Tabs Stage: MY CREATIONS.EXE */}
+          <div
+            className={`w-full h-full flex flex-col items-center justify-start pt-10 sm:pt-14 md:pt-16 lg:pt-20 pb-2 px-4 sm:px-8 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${projectsStage === "carousel"
+              ? "opacity-100 translate-y-0 pointer-events-auto"
+              : "opacity-0 translate-y-[45%] pointer-events-none"
+              }`}
+          >
+            {/* Heading: MY CREATIONS.EXE (Left-aligned with tabs/ribbons, tight gap below) */}
+            <div className="relative z-10 w-[78vw] max-w-[1460px] mx-auto flex flex-col items-start justify-start text-left mt-0 mb-0">
+              <h2
+                className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-neutral-900 drop-shadow-sm mb-1 creations-heading transition-colors duration-500"
+                style={{ fontFamily: "'Special Elite', cursive" }}
+              >
+                MY CREATIONS.EXE
+              </h2>
+              <p
+                className="text-xs sm:text-sm text-neutral-800/80 font-mono tracking-wide creations-subheading transition-colors duration-500"
+                style={{ fontFamily: "'Special Elite', cursive" }}
+              >
+                Explore projects in horizontal liquid view &bull; Click to expand
+              </p>
+            </div>
 
+            {/* FlexCarousel with 5 tabs (Exact width between ribbons, large tabs, cloud blur at disappearing ends) */}
+            <div className="relative z-10 w-full flex items-center justify-center -mt-16 sm:-mt-20 md:-mt-24">
               <div
-                className="w-full h-full"
-                style={{
-                  maskImage:
-                    currentTab > 0 && currentTab < PROJECT_ITEMS.length - 1
-                      ? "linear-gradient(to right, transparent 0%, black 48px, black calc(100% - 48px), transparent 100%)"
-                      : currentTab > 0
-                        ? "linear-gradient(to right, transparent 0%, black 48px, black 100%)"
-                        : currentTab < PROJECT_ITEMS.length - 1
-                          ? "linear-gradient(to right, black 0%, black calc(100% - 48px), transparent 100%)"
-                          : "none",
-                  WebkitMaskImage:
-                    currentTab > 0 && currentTab < PROJECT_ITEMS.length - 1
-                      ? "linear-gradient(to right, transparent 0%, black 48px, black calc(100% - 48px), transparent 100%)"
-                      : currentTab > 0
-                        ? "linear-gradient(to right, transparent 0%, black 48px, black 100%)"
-                        : currentTab < PROJECT_ITEMS.length - 1
-                          ? "linear-gradient(to right, black 0%, black calc(100% - 48px), transparent 100%)"
-                          : "none",
-                  transition: "mask-image 0.3s ease, -webkit-mask-image 0.3s ease",
+                className="w-[82vw] max-w-[1520px] h-[540px] sm:h-[580px] lg:h-[620px] relative mx-auto overflow-hidden"
+                onWheelCapture={(e) => {
+                  if (projectsStage !== "carousel") return;
+                  if (currentTab >= PROJECT_ITEMS.length - 1 && e.deltaY > 10) {
+                    scrollDownToServicesAccumulatorRef.current += e.deltaY;
+                    if (scrollDownToServicesAccumulatorRef.current >= 35) {
+                      scrollDownToServicesAccumulatorRef.current = 0;
+                      updateScrollPos(2);
+                    }
+                  } else {
+                    scrollDownToServicesAccumulatorRef.current = 0;
+                  }
+                }}
+                onWheel={(e) => {
+                  if (projectsStage !== "carousel") return;
+                  e.stopPropagation();
+                  if (Date.now() < arrivalLockUntilRef.current) {
+                    e.preventDefault();
+                  }
                 }}
               >
-                <FlexCarousel
-                  ref={carouselRef}
-                  items={PROJECT_ITEMS}
-                  preset="liquid"
-                  intro="none"
-                  cardHeight={0.58}
-                  gap={14}
-                  squeeze={0}
-                  focusOnClick={false}
-                  captions
-                  tilt={-180}
-                  bend={0}
-                  liquid={0}
-                  onChange={(idx) => setCurrentTab(idx)}
-                  onSelect={(idx) => handleSelectProject(PROJECT_ITEMS[idx])}
-                  onScrollPrev={handleScrollUpToAbout}
+                {/* Left Side Blur - Only visible when not on first tab, smoothly merges into background */}
+                <div
+                  className={`absolute left-0 top-1/2 -translate-y-1/2 h-[58%] w-10 sm:w-12 md:w-14 z-20 pointer-events-none select-none rounded-r-xl transition-opacity duration-300 ${currentTab > 0 ? "opacity-100" : "opacity-0"
+                    }`}
+                  style={{
+                    backdropFilter: "blur(10px)",
+                    WebkitBackdropFilter: "blur(10px)",
+                    maskImage:
+                      "linear-gradient(to right, black 0%, rgba(0,0,0,0.5) 60%, transparent 100%)",
+                    WebkitMaskImage:
+                      "linear-gradient(to right, black 0%, rgba(0,0,0,0.5) 60%, transparent 100%)",
+                  }}
                 />
+
+                {/* Right Side Blur - Only visible when not on last tab, smoothly merges into background */}
+                <div
+                  className={`absolute right-0 top-1/2 -translate-y-1/2 h-[58%] w-10 sm:w-12 md:w-14 z-20 pointer-events-none select-none rounded-l-xl transition-opacity duration-300 ${currentTab < PROJECT_ITEMS.length - 1 ? "opacity-100" : "opacity-0"
+                    }`}
+                  style={{
+                    backdropFilter: "blur(10px)",
+                    WebkitBackdropFilter: "blur(10px)",
+                    maskImage:
+                      "linear-gradient(to left, black 0%, rgba(0,0,0,0.5) 60%, transparent 100%)",
+                    WebkitMaskImage:
+                      "linear-gradient(to left, black 0%, rgba(0,0,0,0.5) 60%, transparent 100%)",
+                  }}
+                />
+
+                <div
+                  className="w-full h-full"
+                  style={{
+                    maskImage:
+                      currentTab > 0 && currentTab < PROJECT_ITEMS.length - 1
+                        ? "linear-gradient(to right, transparent 0%, black 48px, black calc(100% - 48px), transparent 100%)"
+                        : currentTab > 0
+                          ? "linear-gradient(to right, transparent 0%, black 48px, black 100%)"
+                          : currentTab < PROJECT_ITEMS.length - 1
+                            ? "linear-gradient(to right, black 0%, black calc(100% - 48px), transparent 100%)"
+                            : "none",
+                    WebkitMaskImage:
+                      currentTab > 0 && currentTab < PROJECT_ITEMS.length - 1
+                        ? "linear-gradient(to right, transparent 0%, black 48px, black calc(100% - 48px), transparent 100%)"
+                        : currentTab > 0
+                          ? "linear-gradient(to right, transparent 0%, black 48px, black 100%)"
+                          : currentTab < PROJECT_ITEMS.length - 1
+                            ? "linear-gradient(to right, black 0%, black calc(100% - 48px), transparent 100%)"
+                            : "none",
+                    transition: "mask-image 0.3s ease, -webkit-mask-image 0.3s ease",
+                  }}
+                >
+                  <FlexCarousel
+                    ref={carouselRef}
+                    items={PROJECT_ITEMS}
+                    preset="liquid"
+                    intro="none"
+                    cardHeight={0.58}
+                    gap={14}
+                    squeeze={0}
+                    focusOnClick={false}
+                    captions
+                    tilt={-180}
+                    bend={0}
+                    liquid={0}
+                    onChange={(idx) => setCurrentTab(idx)}
+                    onSelect={(idx) => handleSelectProject(PROJECT_ITEMS[idx])}
+                    onScrollPrev={handleScrollUpFromCarousel}
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Bottom Footer hint — placed safely above the horizon */}
-          <div className="relative z-10 text-center pb-2 mt-auto">
-            <span
-              className="text-xs text-neutral-700/60 font-mono tracking-widest uppercase portfolio-tabs-counter transition-colors duration-500"
-              style={{ fontFamily: "'Special Elite', cursive" }}
-            >
-              5 TABS LOADED
-            </span>
+            {/* Bottom Footer hint — placed safely above the horizon */}
+            <div className="relative z-10 text-center pb-2 mt-auto">
+              {currentTab === PROJECT_ITEMS.length - 1 ? (
+                <button
+                  type="button"
+                  onClick={() => updateScrollPos(2)}
+                  className="group inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-neutral-900/10 dark:bg-white/10 hover:bg-neutral-900/20 dark:hover:bg-white/20 text-neutral-800 dark:text-neutral-200 text-xs font-mono tracking-wider uppercase transition-all duration-300 hover:scale-105 cursor-pointer backdrop-blur-sm border border-neutral-900/10 dark:border-white/10 shadow-sm"
+                  style={{ fontFamily: "'Special Elite', cursive" }}
+                >
+                  <span>Scroll down for Experience</span>
+                  <span className="transition-transform group-hover:translate-y-0.5">↓</span>
+                </button>
+              ) : (
+                <span
+                  className="text-xs text-neutral-700/60 font-mono tracking-widest uppercase portfolio-tabs-counter transition-colors duration-500"
+                  style={{ fontFamily: "'Special Elite', cursive" }}
+                >
+                  {currentTab + 1} / {PROJECT_ITEMS.length} TABS LOADED
+                </span>
+              )}
+            </div>
           </div>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* SECTION 3: WHAT WE SHIP / BRAND APPART SERVICES                 */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        <div className={`relative w-full h-full overflow-hidden flex flex-col items-center justify-start transition-opacity duration-300 ${isActive && scrollPos === 2 ? "pointer-events-auto opacity-100 visible" : "pointer-events-none opacity-0 invisible"}`}>
+          <WhatWeShipSection
+            isActive={isActive && scrollPos === 2}
+            activeCardIndex={servicesCardIndex}
+            onActiveCardChange={setServicesCardIndex}
+            externalStopRequest={whatWeShipStopRequest}
+            onSectionZoneChange={setSectionZone}
+            onScrollUpToCreations={() => {
+              updateScrollPos(1, "carousel");
+              setCurrentTab(PROJECT_ITEMS.length - 1);
+            }}
+          />
         </div>
       </div>
     </div>
@@ -1012,7 +1375,7 @@ return (
     >
       <video
         ref={videoRef}
-        src="/assets/transition/pc_click.mp4"
+        src={pcVideoSrc}
         preload="auto"
         playsInline
         className="absolute inset-0 w-full h-full select-none render-high-quality"

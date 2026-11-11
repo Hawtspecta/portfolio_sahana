@@ -152,6 +152,54 @@ body::-webkit-scrollbar,
   will-change: transform;
 }
 
+@keyframes pcClickHint {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, 8px, 0) scale(0.95);
+  }
+  4% {
+    opacity: 1;
+    transform: translate3d(-50%, 0px, 0) scale(1);
+  }
+  30% {
+    opacity: 1;
+    transform: translate3d(-50%, -2px, 0) scale(1);
+  }
+  38% {
+    opacity: 0;
+    transform: translate3d(-50%, -7px, 0) scale(0.97);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-50%, 8px, 0) scale(0.95);
+  }
+}
+
+.pc-click-hint {
+  animation: pcClickHint 10s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+  animation-delay: 0s;
+  will-change: opacity, transform;
+  background-color: rgba(253, 246, 236, 0.88);
+  color: #2b180e;
+  border-color: rgba(74, 44, 29, 0.28);
+  box-shadow: 0 8px 20px rgba(43, 24, 14, 0.14);
+}
+
+html[data-theme="dark"] .pc-click-hint {
+  background-color: rgba(28, 19, 14, 0.86);
+  color: #fbf6ec;
+  border-color: rgba(251, 246, 236, 0.26);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-click-hint {
+    animation: none;
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
 /* ─── Gradient ASCII Styles ──────────────────────────────────────── */
 .gradient-ascii-container {
   position: relative;
@@ -434,6 +482,29 @@ html[data-theme="dark"] .creations-subheading {
 
 html[data-theme="dark"] .portfolio-tabs-counter {
   color: #c9bea9 !important;
+}
+
+/* ─── Experience / What We Ship Section Dark & Light Mode Theme Adaptations ─── */
+:root, html[data-theme="light"] {
+  --exp-headline-color: #2b180e;
+  --exp-eyebrow-color: #4a2c1d;
+  --exp-subtext-color: #3d2314;
+  --exp-caret-color: #2b180e;
+  --exp-pill-color: #2b180e;
+  --exp-pill-border: #2b180e;
+  --exp-pill-bg: rgba(43, 24, 14, 0.08);
+  --exp-text-shadow: none;
+}
+
+html[data-theme="dark"], html.dark {
+  --exp-headline-color: #fbf6ec;
+  --exp-eyebrow-color: #f3ece0;
+  --exp-subtext-color: #e4d8c6;
+  --exp-caret-color: #f6ad55;
+  --exp-pill-color: #fbf6ec;
+  --exp-pill-border: rgba(251, 246, 236, 0.35);
+  --exp-pill-bg: rgba(251, 246, 236, 0.12);
+  --exp-text-shadow: 0 2px 14px rgba(251, 246, 236, 0.22), 0 2px 8px rgba(0, 0, 0, 0.95);
 }
 
 html[data-theme="dark"] .horizon-desk-bar {

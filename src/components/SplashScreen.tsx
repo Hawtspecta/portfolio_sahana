@@ -115,32 +115,8 @@ export default function SplashScreen({
   const [loadProgress, setLoadProgress] = useState(0);
   const [ready, setReady] = useState(false);
   const [firstFrameReady, setFirstFrameReady] = useState(false);
-  const [showLoader, setShowLoader] = useState(false);
-  const loaderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasDrawnFirstFrameRef = useRef(false);
   const hasStartedPlaybackRef = useRef(false);
-
-  useEffect(() => {
-    // Only show hamster loader if splash is loading and not skipping / already past
-    if (!ready && !isHeroActive && !isAboutActive) {
-      if (!loaderTimerRef.current) {
-        loaderTimerRef.current = setTimeout(() => {
-          setShowLoader(true);
-        }, 150);
-      }
-    } else {
-      if (loaderTimerRef.current) {
-        clearTimeout(loaderTimerRef.current);
-        loaderTimerRef.current = null;
-      }
-      setShowLoader(false);
-    }
-    return () => {
-      if (loaderTimerRef.current) {
-        clearTimeout(loaderTimerRef.current);
-      }
-    };
-  }, [ready, isHeroActive, isAboutActive]);
 
     // ─── Resize Canvas with Native High-DPI Retina Buffer ─────────
     const resizeCanvas = useCallback(() => {
@@ -464,7 +440,7 @@ return () => {
         loadedCount++;
         setLoadProgress(Math.round((loadedCount / TOTAL_FRAMES) * 100));
 
-        // Immediately draw the 1st frame and notify parent as soon as frame 0 arrives (< 50ms)
+        // Immediately draw the 1st frame as soon as frame 0 arrives (< 50ms)
         if (!hasDrawnFirstFrameRef.current && images[0]?.complete && images[0]?.naturalWidth > 0) {
           hasDrawnFirstFrameRef.current = true;
           setFirstFrameReady(true);
@@ -475,11 +451,10 @@ return () => {
             currentRenderedFrameRef.current = 0;
             drawFrame(0);
           }
-          onReadyRef.current?.();
         }
 
-        // Start playback as soon as initial buffer (10 frames) is ready or all frames loaded
-        if (!hasStartedPlaybackRef.current && (loadedCount >= Math.min(10, TOTAL_FRAMES) || loadedCount === TOTAL_FRAMES)) {
+        // Start playback as soon as initial buffer (25 frames) is ready or all frames loaded
+        if (!hasStartedPlaybackRef.current && (loadedCount >= Math.min(25, TOTAL_FRAMES) || loadedCount === TOTAL_FRAMES)) {
           hasStartedPlaybackRef.current = true;
           setReady(true);
           onReadyRef.current?.();
@@ -529,24 +504,66 @@ return () => {
           };
         }, []);
 
-        if (!mounted) {
-          return <div className="h-screen bg-black" />;
-        }
+  if (!mounted) {
+    if (isHeroActive || isAboutActive) {
+      return <div className="h-screen bg-black" />;
+    }
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black select-none">
+        <div
+          aria-label="Orange and tan hamster running in a metal wheel"
+          role="img"
+          className="wheel-and-hamster"
+        >
+          <div className="wheel" />
+          <div className="hamster">
+            <div className="hamster__body">
+              <div className="hamster__head">
+                <div className="hamster__ear" />
+                <div className="hamster__eye" />
+                <div className="hamster__nose" />
+              </div>
+              <div className="hamster__limb hamster__limb--fr" />
+              <div className="hamster__limb hamster__limb--fl" />
+              <div className="hamster__limb hamster__limb--br" />
+              <div className="hamster__limb hamster__limb--bl" />
+              <div className="hamster__tail" />
+            </div>
+          </div>
+          <div className="spoke" />
+        </div>
+        <div className="mt-6 flex flex-col items-center gap-2">
+          <p
+            className="text-xs sm:text-sm text-[#fbf6ec]/80 font-mono tracking-widest uppercase animate-pulse"
+            style={{ fontFamily: "'Special Elite', cursive" }}
+          >
+            Loading experience...
+          </p>
+          <div className="w-40 sm:w-48 h-1 bg-white/15 rounded-full overflow-hidden mt-1">
+            <div
+              className="h-full bg-[#fbf6ec]/80 rounded-full transition-all duration-200"
+              style={{ width: "0%" }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-return (
-  <div
-    ref={containerRef}
-    className="fixed inset-0 z-30 w-full h-full overflow-hidden select-none bg-black"
-  >
-    {/* Fixed canvas — the continuous video viewport & portfolio background */}
-    <canvas
-      ref={canvasRef}
-      onClick={handleUserGesture}
-      className="fixed inset-0 w-full h-full z-0 block cursor-default render-high-quality"
-    />
+  return (
+    <div
+      ref={containerRef}
+      className="fixed inset-0 z-30 w-full h-full overflow-hidden select-none bg-black"
+    >
+      {/* Fixed canvas — the continuous video viewport & portfolio background */}
+      <canvas
+        ref={canvasRef}
+        onClick={handleUserGesture}
+        className="fixed inset-0 w-full h-full z-0 block cursor-default render-high-quality"
+      />
 
-      {/* Hamster Wheel Loading Animation — only visible before the splash screen is ready, if loading takes > 150ms */}
-      {showLoader && !ready && !isHeroActive && !isAboutActive && (
+      {/* Hamster Wheel Loading Animation — visible while splash screen frames are loading */}
+      {!ready && !isHeroActive && !isAboutActive && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black pointer-events-none transition-opacity duration-300">
           <div
             aria-label="Orange and tan hamster running in a metal wheel"
@@ -586,6 +603,6 @@ return (
           </div>
         </div>
       )}
-        </div>
-      );
+    </div>
+  );
 }

@@ -34,7 +34,6 @@ export default function HeroSection({
   onFastForwardComplete,
   onProgressChange,
   targetProgress,
-  lenis,
   fastForwardTrigger,
 }: HeroSectionProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -55,6 +54,7 @@ export default function HeroSection({
   const wasAboutActiveRef = useRef(false);
   const isFastForwardingRef = useRef(false);
   const transitionCooldownRef = useRef(0);
+  const lastWheelScrubTimeRef = useRef(0);
 
   const onHeroCompleteRef = useRef(onHeroComplete);
   useEffect(() => {
@@ -85,9 +85,9 @@ export default function HeroSection({
   const loadedCountRef = useRef(0);
 
   // ─── 1. Resize Canvas with Native High-DPI Retina Buffer ─────────
-  const resizeCanvas = useCallback(() => {
+  const resizeCanvas = useCallback((): boolean => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) return false;
     const dpr = Math.max(window.devicePixelRatio || 1, 2);
     const targetW = Math.round(window.innerWidth * dpr);
     const targetH = Math.round(window.innerHeight * dpr);
@@ -100,7 +100,9 @@ export default function HeroSection({
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
       }
+      return true;
     }
+    return false;
   }, []);
 
   // ─── 2. Draw Frame to Canvas with High Quality Filtering ────────────
@@ -120,16 +122,20 @@ export default function HeroSection({
     }
   }, []);
 
-  // Handle external navigation target progress
+  // Handle external navigation target progress (guarded against racing active wheel scrub)
   useEffect(() => {
     if (targetProgress != null && isActive && !isAboutActive) {
+      // Never let an async React prop update fight recent direct wheel scrubbing
+      if (Date.now() - lastWheelScrubTimeRef.current < 220) {
+        onProgressChangeRef.current?.(targetFrameRef.current / (TOTAL_FRAMES - 1));
+        return;
+      }
       const frame = Math.min(
         TOTAL_FRAMES - 1,
         Math.max(0, Math.round(targetProgress * (TOTAL_FRAMES - 1)))
       );
       targetFrameRef.current = frame;
       smoothFrameRef.current = frame;
-      lastDrawnFrameRef.current = frame;
       drawFrame(frame);
       onProgressChangeRef.current?.(targetProgress);
       if (targetProgress >= 0.99) {
@@ -252,7 +258,12 @@ export default function HeroSection({
         const handleLoad = () => {
           loaded++;
           loadedCountRef.current = loaded;
-          if (loaded >= 5 && !hasDrawnInitialRef.current && lastDrawnFrameRef.current === 0) {
+          if (
+            loaded >= 5 &&
+            !hasDrawnInitialRef.current &&
+            lastDrawnFrameRef.current === 0 &&
+            targetFrameRef.current === 0
+          ) {
             hasDrawnInitialRef.current = true;
             drawFrame(0);
           }
@@ -286,13 +297,19 @@ export default function HeroSection({
       return;
     }
 
-    resizeCanvas();
+    if (resizeCanvas()) {
+      drawFrame(lastDrawnFrameRef.current || 0);
+    }
 
-    // If returning from About, place at frame TOTAL_FRAMES - 4 ready to scrub backward
+    // Returning from About: anchor seamlessly at final hero frame (only if not already scrubbed earlier)
     if (wasAboutActiveRef.current) {
       transitionCooldownRef.current = Date.now() + 450;
-      if (targetProgressRef.current == null) {
-        const returnIndex = Math.max(0, TOTAL_FRAMES - 4);
+      if (
+        targetProgressRef.current == null &&
+        targetFrameRef.current >= TOTAL_FRAMES - 1 &&
+        smoothFrameRef.current >= TOTAL_FRAMES - 1
+      ) {
+        const returnIndex = TOTAL_FRAMES - 1;
         targetFrameRef.current = returnIndex;
         smoothFrameRef.current = returnIndex;
         drawFrame(returnIndex);
@@ -303,7 +320,7 @@ export default function HeroSection({
 
     // Continuous 60fps/120fps display refresh lerp loop
     const raf = () => {
-      if (!isFastForwardingRef.current) {
+      if (!isAboutActiveRef.current && !isFastForwardingRef.current) {
         const diff = targetFrameRef.current - smoothFrameRef.current;
         if (Math.abs(diff) > 0.015) {
           smoothFrameRef.current += diff * 0.18;
@@ -328,37 +345,40 @@ export default function HeroSection({
 
     scrubAnimIdRef.current = requestAnimationFrame(raf);
 
-    // Listen to unified Lenis virtual-scroll
-    let unsubscribeVirtualScroll: (() => void) | null = null;
-    if (lenis) {
-      unsubscribeVirtualScroll = lenis.on("virtual-scroll", ({ deltaY }) => {
-        if (!isActive || isAboutActiveRef.current || isFastForwardingRef.current) return;
+    const processDelta = (deltaY: number) => {
+      if (!isActive || isAboutActiveRef.current || isFastForwardingRef.current) return;
+      lastWheelScrubTimeRef.current = Date.now();
 
-        // Upward scroll (scrub backward)
-        if (deltaY < -3) {
-          hasCompletedRef.current = false;
+      // Upward scroll (scrub backward)
+      if (deltaY < -3) {
+        hasCompletedRef.current = false;
+        const deltaFrames = Math.max(0.6, Math.min(8, Math.abs(deltaY) * 0.08));
+        targetFrameRef.current = Math.max(0, targetFrameRef.current - deltaFrames);
+      } else if (deltaY > 3) {
+        // Downward scroll (scrub forward)
+        if (
+          Date.now() > transitionCooldownRef.current &&
+          targetFrameRef.current >= TOTAL_FRAMES - 1 &&
+          deltaY > 5
+        ) {
+          onScrollPastHeroRef.current?.();
+        } else {
           const deltaFrames = Math.max(0.6, Math.min(8, Math.abs(deltaY) * 0.08));
-          targetFrameRef.current = Math.max(0, targetFrameRef.current - deltaFrames);
-        } else if (deltaY > 3) {
-          // Downward scroll (scrub forward)
-          if (
-            Date.now() > transitionCooldownRef.current &&
-            targetFrameRef.current >= TOTAL_FRAMES - 1 &&
-            deltaY > 5
-          ) {
-            onScrollPastHeroRef.current?.();
-          } else {
-            const deltaFrames = Math.max(0.6, Math.min(8, Math.abs(deltaY) * 0.08));
-            targetFrameRef.current = Math.min(TOTAL_FRAMES - 1, targetFrameRef.current + deltaFrames);
+          targetFrameRef.current = Math.min(TOTAL_FRAMES - 1, targetFrameRef.current + deltaFrames);
 
-            if (targetFrameRef.current >= TOTAL_FRAMES - 1) {
-              hasCompletedRef.current = true;
-              onHeroCompleteRef.current?.();
-            }
+          if (targetFrameRef.current >= TOTAL_FRAMES - 1) {
+            hasCompletedRef.current = true;
+            onHeroCompleteRef.current?.();
           }
         }
-      });
-    }
+      }
+    };
+
+    // Direct wheel listener (matches AboutTransition): captures every wheel tick once cleanly
+    const handleWindowWheel = (e: WheelEvent) => {
+      processDelta(e.deltaY);
+    };
+    window.addEventListener("wheel", handleWindowWheel, { passive: true });
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isActive || isAboutActiveRef.current || isFastForwardingRef.current) return;
@@ -384,11 +404,11 @@ export default function HeroSection({
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
+      window.removeEventListener("wheel", handleWindowWheel);
       window.removeEventListener("keydown", handleKeyDown);
-      if (unsubscribeVirtualScroll) unsubscribeVirtualScroll();
       if (scrubAnimIdRef.current) cancelAnimationFrame(scrubAnimIdRef.current);
     };
-  }, [isActive, isAboutActive, lenis, drawFrame, resizeCanvas]);
+  }, [isActive, isAboutActive, drawFrame, resizeCanvas]);
 
   return (
     <div

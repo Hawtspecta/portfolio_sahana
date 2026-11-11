@@ -101,7 +101,17 @@ export default function Home() {
       if (!saved || !saved.section) return;
 
       hasRestoredRef.current = true;
-      if (
+      if (saved.section === "services") {
+        setIsLastFrame(true);
+        setIsAboutActive(true);
+        setIsPortfolioActive(true);
+        setIsSplashReady(true);
+        setTransitionProgress(1);
+        setTargetAboutProgress(1);
+        setTargetSplashProgress(1);
+        setPortfolioScrollProgress(2);
+        setTargetPortfolioProgress(2);
+      } else if (
         saved.section === "projects" ||
         saved.section === "expanded_project" ||
         saved.expandedProjectTitle
@@ -109,6 +119,7 @@ export default function Home() {
         setIsLastFrame(true);
         setIsAboutActive(true);
         setIsPortfolioActive(true);
+        setIsSplashReady(true);
         setTransitionProgress(1);
         setTargetAboutProgress(1);
         setTargetSplashProgress(1);
@@ -121,6 +132,7 @@ export default function Home() {
         setIsLastFrame(true);
         setIsAboutActive(true);
         setIsPortfolioActive(true);
+        setIsSplashReady(true);
         setTransitionProgress(1);
         setTargetAboutProgress(1);
         setTargetSplashProgress(1);
@@ -130,6 +142,7 @@ export default function Home() {
         setIsLastFrame(true);
         setIsAboutActive(true);
         setIsPortfolioActive(false);
+        setIsSplashReady(true);
         setTargetSplashProgress(1);
         const tp = saved.transitionProgress ?? 0.5;
         setTransitionProgress(tp);
@@ -140,6 +153,7 @@ export default function Home() {
         setIsLastFrame(true);
         setIsAboutActive(false);
         setIsPortfolioActive(false);
+        setIsSplashReady(true);
         setTargetSplashProgress(1);
         const hp = saved.heroProgress ?? 0.5;
         setHeroProgress(hp);
@@ -171,9 +185,11 @@ export default function Home() {
             ? "transition"
             : isProjectLiveExpanded
               ? "expanded_project"
-              : portfolioScrollProgress >= 0.5
-                ? "projects"
-                : "about";
+              : portfolioScrollProgress >= 1.5
+                ? "services"
+                : portfolioScrollProgress >= 0.5
+                  ? "projects"
+                  : "about";
 
       const stateToSave = {
         ...existing,
@@ -276,9 +292,8 @@ export default function Home() {
     setIsPortfolioActive(false);
     setPortfolioScrollProgress(0);
     setTargetPortfolioProgress(null);
-    const handoffProgress = 104 / 105;
-    setTransitionProgress(handoffProgress);
-    setTargetAboutProgress(handoffProgress);
+    setTransitionProgress(1);
+    setTargetAboutProgress(null);
   }, []);
 
   // Dedicated navigation to jump directly back to Hero section 1st frame (frame 0)
@@ -348,12 +363,12 @@ export default function Home() {
   // - Once splash screen completes:
   //   Hero: 0.0 -> 0.40
   //   About Transition: 0.40 -> 0.75
-  //   Portfolio (PC -> MY CREATIONS.EXE): 0.75 -> 1.00
+  //   Portfolio (PC -> MY CREATIONS.EXE -> WHAT WE SHIP): 0.75 -> 1.00
   const overallProgress = !isLastFrame
     ? splashProgress
     : isAboutActive
       ? isPortfolioActive
-        ? 0.75 + portfolioScrollProgress * 0.25
+        ? 0.75 + (Math.min(2, portfolioScrollProgress) / 2) * 0.25
         : 0.40 + transitionProgress * 0.35
       : heroProgress * 0.40;
 
@@ -382,8 +397,8 @@ export default function Home() {
         setIsAboutActive(true);
         setIsPortfolioActive(false);
       } else {
-        // Portfolio Section (PC -> MY CREATIONS.EXE continuous scroll)
-        const pp = Math.min(1, Math.max(0, (targetProgress - 0.75) / 0.25));
+        // Portfolio Section (PC -> MY CREATIONS.EXE -> WHAT WE SHIP continuous scroll)
+        const pp = Math.min(2, Math.max(0, ((targetProgress - 0.75) / 0.25) * 2));
         setTransitionProgress(1);
         setTargetAboutProgress(1);
         setTargetHeroProgress(null);
@@ -411,9 +426,10 @@ export default function Home() {
   }, [isLastFrame, isAboutActive, isPortfolioActive]);
 
   // Skip button persists through splash screen, hero, and transition (including the last transition frame).
-  // It appears immediately from the 1st frame of the splash screen.
+  // It only appears once the splash screen is ready (not on the loading screen).
   // It is hidden on the About section, Portfolio/Creations section, and when a project is expanded.
   const isSkipButtonVisible =
+    isSplashReady &&
     !isPortfolioActive &&
     !isProjectLiveExpanded;
 
@@ -484,8 +500,8 @@ export default function Home() {
           {/* Left MetaBalls — 2 blobs, expansive contour rings */}
           <div className={`absolute left-[5vw] sm:left-[7vw] lg:left-[8.5vw] top-[11%] sm:top-[13%] md:top-[14%] w-[18vw] min-w-[140px] max-w-[250px] h-[360px] max-h-[46vh] ${!isAboutActive ? "pointer-events-auto" : "pointer-events-none"}`}>
             <MetaBalls
-              color={theme === "dark" ? "#ece2d2" : "#000000"}
-              cursorBallColor={theme === "dark" ? "#fbf6ec" : "#000000"}
+              color="#000000"
+              cursorBallColor="#000000"
               variant="contour"
               motion="lava"
               ballCount={2}
@@ -510,8 +526,8 @@ export default function Home() {
           {/* Right MetaBalls — 3 blobs, expansive contour rings */}
           <div className={`absolute right-[5vw] sm:right-[7vw] lg:right-[8.5vw] top-[15%] sm:top-[17%] md:top-[18%] w-[18vw] min-w-[140px] max-w-[250px] h-[360px] max-h-[46vh] ${!isAboutActive ? "pointer-events-auto" : "pointer-events-none"}`}>
             <MetaBalls
-              color={theme === "dark" ? "#ece2d2" : "#000000"}
-              cursorBallColor={theme === "dark" ? "#fbf6ec" : "#000000"}
+              color="#000000"
+              cursorBallColor="#000000"
               variant="contour"
               motion="lava"
               ballCount={3}
