@@ -115,8 +115,32 @@ export default function SplashScreen({
   const [loadProgress, setLoadProgress] = useState(0);
   const [ready, setReady] = useState(false);
   const [firstFrameReady, setFirstFrameReady] = useState(false);
+  const [showLoader, setShowLoader] = useState(false);
+  const loaderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasDrawnFirstFrameRef = useRef(false);
   const hasStartedPlaybackRef = useRef(false);
+
+  useEffect(() => {
+    // Only show hamster loader if splash is loading and not skipping / already past
+    if (!ready && !isHeroActive && !isAboutActive) {
+      if (!loaderTimerRef.current) {
+        loaderTimerRef.current = setTimeout(() => {
+          setShowLoader(true);
+        }, 150);
+      }
+    } else {
+      if (loaderTimerRef.current) {
+        clearTimeout(loaderTimerRef.current);
+        loaderTimerRef.current = null;
+      }
+      setShowLoader(false);
+    }
+    return () => {
+      if (loaderTimerRef.current) {
+        clearTimeout(loaderTimerRef.current);
+      }
+    };
+  }, [ready, isHeroActive, isAboutActive]);
 
     // ─── Resize Canvas with Native High-DPI Retina Buffer ─────────
     const resizeCanvas = useCallback(() => {
@@ -521,19 +545,44 @@ return (
       className="fixed inset-0 w-full h-full z-0 block cursor-default render-high-quality"
     />
 
-      {/* Loading indicator — only visible before the 1st frame is ready */}
-      {!firstFrameReady && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-48 h-1 bg-white/20 rounded-full overflow-hidden">
+      {/* Hamster Wheel Loading Animation — only visible before the splash screen is ready, if loading takes > 150ms */}
+      {showLoader && !ready && !isHeroActive && !isAboutActive && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black pointer-events-none transition-opacity duration-300">
+          <div
+            aria-label="Orange and tan hamster running in a metal wheel"
+            role="img"
+            className="wheel-and-hamster"
+          >
+            <div className="wheel" />
+            <div className="hamster">
+              <div className="hamster__body">
+                <div className="hamster__head">
+                  <div className="hamster__ear" />
+                  <div className="hamster__eye" />
+                  <div className="hamster__nose" />
+                </div>
+                <div className="hamster__limb hamster__limb--fr" />
+                <div className="hamster__limb hamster__limb--fl" />
+                <div className="hamster__limb hamster__limb--br" />
+                <div className="hamster__limb hamster__limb--bl" />
+                <div className="hamster__tail" />
+              </div>
+            </div>
+            <div className="spoke" />
+          </div>
+          <div className="mt-6 flex flex-col items-center gap-2">
+            <p
+              className="text-xs sm:text-sm text-[#fbf6ec]/80 font-mono tracking-widest uppercase animate-pulse"
+              style={{ fontFamily: "'Special Elite', cursive" }}
+            >
+              Loading experience... {loadProgress > 0 ? `${loadProgress}%` : ""}
+            </p>
+            <div className="w-40 sm:w-48 h-1 bg-white/15 rounded-full overflow-hidden mt-1">
               <div
-                className="h-full bg-white rounded-full transition-all duration-200"
+                className="h-full bg-[#fbf6ec]/80 rounded-full transition-all duration-200"
                 style={{ width: `${loadProgress}%` }}
               />
             </div>
-            <p className="text-white/60 text-sm font-mono">
-              Loading {loadProgress}%
-            </p>
           </div>
         </div>
       )}

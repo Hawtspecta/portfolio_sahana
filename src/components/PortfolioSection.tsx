@@ -7,12 +7,22 @@ import FlexCarousel, { FlexCarouselHandle } from "@/components/FlexCarousel";
 import ScrollExpand, { ScrollExpandHandle } from "@/components/ScrollExpand";
 import MagicBento from "@/components/MagicBento";
 import { getMagicBentoItems } from "@/data/projectData";
+import Dock, { DockItemData } from "@/components/Dock";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  Folder01Icon,
+  Home01Icon,
+  Mail01Icon,
+  MusicNote03Icon,
+  UserCircle02Icon,
+} from "@hugeicons/core-free-icons";
 
 interface PortfolioSectionProps {
   isActive: boolean;
   externalScrollProgress?: number | null;
   onPortfolioProgressChange?: (progress: number) => void;
   onScrollBackToTransition?: () => void;
+  onScrollToHeroStart?: () => void;
   onExpandedStateChange?: (isExpanded: boolean) => void;
 }
 
@@ -80,6 +90,7 @@ export default function PortfolioSection({
   externalScrollProgress,
   onPortfolioProgressChange,
   onScrollBackToTransition,
+  onScrollToHeroStart,
   onExpandedStateChange,
 }: PortfolioSectionProps) {
   const [isHovered, setIsHovered] = useState(false);
@@ -279,6 +290,81 @@ const handleScrollUpToAbout = useCallback(() => {
   setResistanceOffset(0);
 }, [updateScrollPos]);
 
+const glyph = useCallback((icon: any) => <HugeiconsIcon icon={icon} size="1.25em" strokeWidth={1.8} />, []);
+const [isMusicActive, setIsMusicActive] = useState(true);
+
+const dockItems: DockItemData[] = useMemo(() => [
+  {
+    icon: glyph(Home01Icon),
+    label: 'Home',
+    onClick: () => {
+      onScrollToHeroStart?.();
+    },
+    menu: [
+      { label: 'Hero (1st Frame)', onClick: () => onScrollToHeroStart?.() },
+      { separator: true },
+      { label: "Who's Behind the Screen", onClick: () => updateScrollPos(0) },
+      { label: 'My Creations.exe (5 Projects)', onClick: () => updateScrollPos(1) },
+    ]
+  },
+  {
+    icon: glyph(UserCircle02Icon),
+    label: 'About',
+    active: scrollPos === 0,
+    onClick: () => {
+      updateScrollPos(0);
+    },
+    menu: [
+      { label: "Who's Behind the Screen?", onClick: () => updateScrollPos(0) },
+      { separator: true },
+      { label: 'Back to Hero', onClick: () => onScrollToHeroStart?.() },
+      { label: 'Go to My Creations (5)', onClick: () => updateScrollPos(1) },
+    ]
+  },
+  {
+    icon: glyph(Folder01Icon),
+    label: 'Projects',
+    badge: 5,
+    active: scrollPos === 1,
+    onClick: () => {
+      updateScrollPos(1);
+    },
+    menu: [
+      { label: 'My Creations.exe (5 Projects)', onClick: () => updateScrollPos(1) },
+      { separator: true },
+      { label: '1. AI Law Bot', onClick: () => { updateScrollPos(1); setCurrentTab(0); } },
+      { label: '2. UFI Platform', onClick: () => { updateScrollPos(1); setCurrentTab(1); } },
+      { label: '3. Urban Brew', onClick: () => { updateScrollPos(1); setCurrentTab(2); } },
+      { label: '4. India Connect Hub', onClick: () => { updateScrollPos(1); setCurrentTab(3); } },
+      { label: '5. AI Resume Analyzer', onClick: () => { updateScrollPos(1); setCurrentTab(4); } },
+    ]
+  },
+  { separator: true },
+  {
+    icon: glyph(Mail01Icon),
+    label: 'Mail',
+    onClick: () => {
+      window.location.href = "mailto:sahanasnayak@gmail.com";
+    },
+    menu: [
+      { label: 'Compose Email', onClick: () => { window.location.href = "mailto:sahanasnayak@gmail.com"; } },
+      { separator: true },
+      { label: 'Copy Email Address', onClick: () => { navigator.clipboard?.writeText("sahanasnayak@gmail.com"); } }
+    ]
+  },
+  {
+    icon: glyph(MusicNote03Icon),
+    label: isMusicActive ? 'Music' : 'Music (Muted)',
+    className: isMusicActive ? '' : 'opacity-70',
+    onClick: () => {
+      setIsMusicActive(prev => !prev);
+    },
+    menu: [
+      { label: isMusicActive ? 'Mute Sound' : 'Play Sound', onClick: () => setIsMusicActive(prev => !prev) }
+    ]
+  }
+], [glyph, scrollPos, isMusicActive, onScrollToHeroStart, updateScrollPos, setCurrentTab]);
+
 // Restart starting wobble and reset section states whenever active state changes
 if (isActive !== prevActive) {
   setPrevActive(isActive);
@@ -368,16 +454,14 @@ const handleCloseVideo = useCallback(() => {
   } catch { }
 }, []);
 
-// Open project in unexpanded card view so user scrolls to expand
-const handleSelectProject = useCallback((project: typeof PROJECT_ITEMS[0]) => {
-  initialExpandedRef.current = false;
-  setExpandProgress(0);
-  setIsInfoOpen(false);
-  isInfoOpenRef.current = false;
-  setIsIframeLoading(true);
-  startLoadingTimeout();
-  setSelectedProject(project);
-}, []);
+  // Open project in unexpanded card view so user scrolls to expand
+  const handleSelectProject = useCallback((project: typeof PROJECT_ITEMS[0]) => {
+    initialExpandedRef.current = false;
+    setExpandProgress(0);
+    setIsInfoOpen(false);
+    isInfoOpenRef.current = false;
+    startLoadingTimeout();
+    setSelectedProject(project);
   }, [startLoadingTimeout]);
 
 // Close project viewer and restore carousel/screen state
@@ -442,17 +526,23 @@ useEffect(() => {
 
     if (isVideoPlaying || selectedProject) return;
 
-    if (e.key === "ArrowDown" || e.key === "PageDown") {
+    if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === "ArrowRight") {
       if (scrollPos === 0) {
         if (Date.now() < aboutArrivalCooldownUntilRef.current) {
           return;
         }
         hasStoppedAtAboutRef.current = true;
         updateScrollPos(1);
+      } else if (scrollPos === 1) {
+        carouselRef.current?.step(1);
       }
-    } else if (e.key === "ArrowUp" || e.key === "PageUp") {
+    } else if (e.key === "ArrowUp" || e.key === "PageUp" || e.key === "ArrowLeft") {
       if (scrollPos === 1) {
-        handleScrollUpToAbout();
+        if (currentTab <= 0) {
+          handleScrollUpToAbout();
+        } else {
+          carouselRef.current?.step(-1);
+        }
       } else if (scrollPos === 0) {
         if (Date.now() < aboutArrivalCooldownUntilRef.current) {
           return;
@@ -464,7 +554,7 @@ useEffect(() => {
 
   window.addEventListener("keydown", handleKeyDown);
   return () => window.removeEventListener("keydown", handleKeyDown);
-}, [isActive, isVideoPlaying, selectedProject, expandProgress, isInfoOpen, scrollPos, updateScrollPos, handleScrollUpToAbout, handleCloseVideo, handleCloseProject]);
+}, [isActive, isVideoPlaying, selectedProject, expandProgress, isInfoOpen, scrollPos, currentTab, updateScrollPos, handleScrollUpToAbout, handleCloseVideo, handleCloseProject]);
 
 // Wheel listener: smooth natural scroll between About and Creations
 const handleWheel = useCallback(
@@ -866,19 +956,53 @@ return (
 
     {/* ─── FOREGROUND HORIZON DESK BAR (Bottom 8%) ─── */}
     {/* Physically anchors the desk horizon at the bottom; content scrolls strictly above it */}
-    <div className="absolute bottom-0 left-0 right-0 h-[8%] z-20 pointer-events-none select-none overflow-hidden">
+    <div
+      className="absolute bottom-0 left-0 right-0 h-[8%] min-h-[64px] z-20 pointer-events-none select-none overflow-hidden horizon-desk-container shadow-[0_-6px_24px_rgba(0,0,0,0.55)]"
+      style={{
+        backgroundColor: "#2b180e",
+        borderTop: "1.5px solid #2b180e",
+        boxShadow: "0 -6px 24px rgba(0, 0, 0, 0.55)",
+      }}
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/assets/transition/bg_port.webp"
         alt=""
         draggable={false}
         className="absolute bottom-0 left-0 w-full select-none pointer-events-none horizon-desk-bar"
-        style={{ height: "1250%", objectFit: "fill" }}
+        style={{ height: "1450%", objectFit: "fill" }}
       />
       <div
         className="absolute inset-0 pointer-events-none dark-mode-bg-overlay"
         aria-hidden="true"
       />
+    </div>
+
+    {/* ─── DESK DOCK NAVBAR ON BROWN BAR ─── */}
+    {/* Visible starting from the About section, anchored directly on the bottom brown bar */}
+    <div
+      className={`absolute bottom-0 left-0 right-0 h-[8%] min-h-[64px] z-30 flex items-center justify-center pointer-events-none transition-all duration-300 ease-out ${
+        selectedProject || isVideoPlaying
+          ? "opacity-0 pointer-events-none translate-y-6"
+          : "opacity-100 translate-y-0"
+      }`}
+    >
+      <div className="relative w-full h-full pointer-events-none flex items-center justify-center">
+        <Dock
+          className="pointer-events-auto dock--frameless"
+          items={dockItems}
+          baseItemSize={48}
+          magnification={68}
+          distance={220}
+          panelHeight={48}
+          roundness={0.7}
+          showIndicators={false}
+          accentColor="#d97706"
+          badgeColor="#b91c1c"
+          theme="dark"
+          style={{ bottom: "calc(50% - 24px)" }}
+        />
+      </div>
     </div>
 
     {/* Fullscreen Stretched PC Video Modal View */}
@@ -1106,10 +1230,8 @@ return (
 
                 {/* Live Iframe with native-site-cursor enabled for the site's own cursor */}
                 <div className={`relative flex-1 w-full h-full overflow-hidden ${isInfoOpen ? "hidden" : "block native-site-cursor"}`}>
-                  {/* Hamster Wheel Loading Animation while live iframe is loading */}
-                  {isIframeLoading && (
-                    {/* Hamster Wheel Loading Animation — only visible if loading takes > 300ms */ }
-                      {showLoader && isIframeLoading && (
+                  {/* Hamster Wheel Loading Animation — only visible if loading takes > 300ms */}
+                  {showLoader && isIframeLoading && (
                     <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-neutral-950 pointer-events-none transition-opacity duration-300">
                       <div
                         aria-label="Orange and tan hamster running in a metal wheel"
@@ -1145,9 +1267,6 @@ return (
                   <iframe
                     src={selectedProject.demoUrl}
                     title={selectedProject.title}
-                    onLoad={() => setIsIframeLoading(false)}
-                    className={`w-full h-full border-none bg-neutral-900 transition-opacity duration-500 ${isIframeLoading ? "opacity-0" : "opacity-100"
-                      }`}
                     onLoad={handleIframeLoad}
                     className="w-full h-full border-none bg-neutral-900"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"

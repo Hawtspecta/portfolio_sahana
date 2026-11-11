@@ -281,6 +281,18 @@ export default function Home() {
     setTargetAboutProgress(handoffProgress);
   }, []);
 
+  // Dedicated navigation to jump directly back to Hero section 1st frame (frame 0)
+  const handleScrollToHeroStart = useCallback(() => {
+    setIsAboutActive(false);
+    setIsPortfolioActive(false);
+    setHeroProgress(0);
+    setTargetHeroProgress(0);
+    setTransitionProgress(0);
+    setTargetAboutProgress(null);
+    setPortfolioScrollProgress(0);
+    setTargetPortfolioProgress(null);
+  }, []);
+
   const handlePortfolioProgressChange = useCallback((prog: number) => {
     setPortfolioScrollProgress(prog);
     setTargetPortfolioProgress(null);
@@ -543,6 +555,7 @@ export default function Home() {
         externalScrollProgress={targetPortfolioProgress}
         onPortfolioProgressChange={handlePortfolioProgressChange}
         onScrollBackToTransition={handleScrollBackFromPortfolio}
+        onScrollToHeroStart={handleScrollToHeroStart}
         onExpandedStateChange={setIsProjectLiveExpanded}
       />
 

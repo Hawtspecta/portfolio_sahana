@@ -437,13 +437,37 @@ html[data-theme="dark"] .portfolio-tabs-counter {
 }
 
 html[data-theme="dark"] .horizon-desk-bar {
-  filter: brightness(0.48) contrast(1.12);
+  filter: brightness(0.78) contrast(1.15) saturate(1.1);
   transition: filter 0.6s ease-in-out;
 }
 
 html[data-theme="light"] .horizon-desk-bar {
   filter: brightness(1) contrast(1);
   transition: filter 0.6s ease-in-out;
+}
+
+.horizon-desk-container {
+  background-color: #2b180e !important;
+  border-top: 1.5px solid #2b180e !important;
+  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.55) !important;
+}
+
+html[data-theme="dark"] .horizon-desk-container {
+  background-color: #2b180e !important;
+  border-top: 1.5px solid #2b180e !important;
+  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.65) !important;
+}
+
+html[data-theme="dark"] .horizon-desk-container .dark-mode-bg-overlay {
+  background-color: rgba(0, 0, 0, 0.28) !important;
+  backdrop-filter: blur(2px) !important;
+  -webkit-backdrop-filter: blur(2px) !important;
+}
+
+html[data-theme="light"] .horizon-desk-container {
+  background-color: #382215 !important;
+  border-top: 1.5px solid #382215 !important;
+  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.4) !important;
 }
 
 html[data-theme="dark"] .hero-explore-hint {
