@@ -281,8 +281,9 @@ useEffect(() => {
   isVideoPlayingRef.current = isVideoPlaying;
 }, [isVideoPlaying]);
 
-// Pre-buffer full pc_click.mp4 (moov atom sits at EOF) into an in-memory Blob URL so 1st click plays with zero range-request stalls
+// Pre-buffer full pc_click.mp4 (moov atom sits at EOF) into an in-memory Blob URL only once Portfolio is active
 useEffect(() => {
+  if (!isActive) return;
   let cancelled = false;
   const controller = new AbortController();
 
@@ -309,7 +310,7 @@ useEffect(() => {
       pcVideoBlobUrlRef.current = null;
     }
   };
-}, []);
+}, [isActive]);
 
 // Vertical scroll state: 0 = at PC (About Me), 1 = at Creations (MY CREATIONS.EXE), 2 = at What We Ship
 const [scrollPos, setScrollPos] = useState(() => {
@@ -319,8 +320,12 @@ const [scrollPos, setScrollPos] = useState(() => {
   return 0;
 });
 const scrollPosRef = useRef(scrollPos);
+const [hasEnteredExperience, setHasEnteredExperience] = useState(() => scrollPos >= 1);
 useEffect(() => {
   scrollPosRef.current = scrollPos;
+  if (scrollPos >= 1) {
+    setHasEnteredExperience(true);
+  }
 }, [scrollPos]);
 
 const hasRestoredPortfolioRef = useRef(false);
@@ -1382,20 +1387,22 @@ return (
         {/* SECTION 3: WHAT WE SHIP / BRAND APPART SERVICES                 */}
         {/* ═══════════════════════════════════════════════════════════════ */}
         <div className={`relative w-full h-full overflow-hidden flex flex-col items-center justify-start transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${isActive && scrollPos === 2 ? "pointer-events-auto opacity-100 visible" : "pointer-events-none opacity-0 invisible"}`}>
-          <ExperienceSection
-            isActive={isActive && scrollPos === 2}
-            activeCardIndex={servicesCardIndex}
-            onActiveCardChange={setServicesCardIndex}
-            externalStopRequest={experienceStopRequest}
-            externalScrubProgress={externalExperienceProgress}
-            onProgressChange={onExperienceProgressChange}
-            onSectionZoneChange={setSectionZone}
-            onOpenResume={() => setIsResumeOpen(true)}
-            onScrollUpToCreations={() => {
-              updateScrollPos(1, "carousel");
-              setCurrentTab(PROJECT_ITEMS.length - 1);
-            }}
-          />
+          {(scrollPos >= 1 || hasEnteredExperience) && (
+            <ExperienceSection
+              isActive={isActive && scrollPos === 2}
+              activeCardIndex={servicesCardIndex}
+              onActiveCardChange={setServicesCardIndex}
+              externalStopRequest={experienceStopRequest}
+              externalScrubProgress={externalExperienceProgress}
+              onProgressChange={onExperienceProgressChange}
+              onSectionZoneChange={setSectionZone}
+              onOpenResume={() => setIsResumeOpen(true)}
+              onScrollUpToCreations={() => {
+                updateScrollPos(1, "carousel");
+                setCurrentTab(PROJECT_ITEMS.length - 1);
+              }}
+            />
+          )}
         </div>
       </div>
     </div>

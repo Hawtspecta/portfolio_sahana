@@ -788,7 +788,12 @@ export default function EducationRoad({
     const update = (dt: number) => {
       t += dt;
       const targetP = progressRef.current;
-      p = reduced ? targetP : p + (targetP - p) * Math.min(dt * 4.5, 1);
+      const shouldSnap =
+        reduced ||
+        !isVisibleRef.current ||
+        first ||
+        (t < 0.45 && Math.abs(targetP - p) > 0.05);
+      p = shouldSnap ? targetP : p + (targetP - p) * Math.min(dt * 4.5, 1);
 
       const curveP = curvePFromEdu(p);
       const tt = tAt(curveP);

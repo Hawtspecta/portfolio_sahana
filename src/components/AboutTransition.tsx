@@ -146,9 +146,33 @@ export default function AboutTransition({
     const idx = Math.max(0, Math.min(TOTAL_FRAMES - 1, Math.round(frameIndex)));
     if (!force && idx === lastDrawnFrameRef.current) return;
 
-    const targetImg = imagesRef.current[idx];
+    let drawIdx = idx;
+    let targetImg: HTMLImageElement | undefined = imagesRef.current[drawIdx];
+    if (!targetImg || !targetImg.complete || targetImg.naturalWidth === 0) {
+      targetImg = undefined;
+      for (let offset = 1; offset < TOTAL_FRAMES; offset++) {
+        if (idx - offset >= 0) {
+          const prevImg = imagesRef.current[idx - offset];
+          if (prevImg && prevImg.complete && prevImg.naturalWidth > 0) {
+            drawIdx = idx - offset;
+            targetImg = prevImg;
+            break;
+          }
+        }
+        if (idx + offset < TOTAL_FRAMES) {
+          const nextImg = imagesRef.current[idx + offset];
+          if (nextImg && nextImg.complete && nextImg.naturalWidth > 0) {
+            drawIdx = idx + offset;
+            targetImg = nextImg;
+            break;
+          }
+        }
+      }
+    }
+
     if (targetImg && targetImg.complete && targetImg.naturalWidth > 0) {
-      lastDrawnFrameRef.current = idx;
+      if (!force && drawIdx === lastDrawnFrameRef.current) return;
+      lastDrawnFrameRef.current = drawIdx;
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(targetImg, 0, 0, canvas.width, canvas.height);
@@ -309,24 +333,25 @@ export default function AboutTransition({
       images[i - 1] = img;
     };
 
-    // Load first 12 frames immediately
-    for (let i = 1; i <= Math.min(12, TOTAL_FRAMES); i++) {
+    // Load first 24 frames immediately
+    const initialCount = Math.min(24, TOTAL_FRAMES);
+    for (let i = 1; i <= initialCount; i++) {
       loadFrame(i);
     }
 
-    // Trickle remaining frames in small batches so Hero scrolling & cursor stay smooth
-    let nextIdx = 13;
+    // Trickle remaining frames in batches of 12 every 45ms so Transition loads smoothly
+    let nextIdx = initialCount + 1;
     const trickleTimer = setInterval(() => {
       if (cancelled || nextIdx > TOTAL_FRAMES) {
         clearInterval(trickleTimer);
         return;
       }
-      const end = Math.min(TOTAL_FRAMES, nextIdx + 5);
+      const end = Math.min(TOTAL_FRAMES, nextIdx + 11);
       for (let i = nextIdx; i <= end; i++) {
         loadFrame(i);
       }
       nextIdx = end + 1;
-    }, 80);
+    }, 45);
 
     const handleWindowResize = () => {
       resizeCanvas();

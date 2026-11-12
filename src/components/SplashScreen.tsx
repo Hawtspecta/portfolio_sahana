@@ -115,6 +115,7 @@ export default function SplashScreen({
   const [loadProgress, setLoadProgress] = useState(0);
   const [ready, setReady] = useState(false);
   const [firstFrameReady, setFirstFrameReady] = useState(false);
+  const [needsAudioUnlock, setNeedsAudioUnlock] = useState(false);
   const hasDrawnFirstFrameRef = useRef(false);
   const hasStartedPlaybackRef = useRef(false);
 
@@ -327,8 +328,11 @@ const startVideoPlayback = useCallback(() => {
         audio.currentTime = audioStartTime;
         audio.playbackRate = 1.0;
         audio.volume = 1.0;
-        audio.play().catch(() => {
-          // Autoplay policy might block initial sound until user gesture; video frames continue smoothly
+        audio.play().then(() => {
+          setNeedsAudioUnlock(false);
+        }).catch(() => {
+          // Autoplay policy blocked initial sound until user gesture; show subtle prompt
+          setNeedsAudioUnlock(true);
         });
       } catch { }
     }
@@ -376,30 +380,54 @@ if (progress < 1 && currentFrame < targetIndex) {
   activeAnimIdRef.current = requestAnimationFrame(step);
 }, [drawFrame, onLastFrameChange]);
 
-// Un-mute / play audio on user interaction if browser blocked auto-audio
+// Un-mute / unlock / play audio on user interaction (including during loading)
 const handleUserGesture = useCallback(() => {
   const audio = audioRef.current;
-  if (audio && audio.paused && isPlayingRef.current) {
+  if (!audio) return;
+
+  if (!isPlayingRef.current) {
+    // Unlock audio context silently during loading so autoplay succeeds when video starts
+    audio.muted = true;
+    audio.play().then(() => {
+      audio.pause();
+      audio.muted = false;
+      audio.currentTime = AUDIO_START_OFFSET;
+      setNeedsAudioUnlock(false);
+    }).catch(() => {
+      audio.muted = false;
+    });
+    return;
+  }
+
+  if (audio.paused) {
     const currentProgress = currentRenderedFrameRef.current / (TOTAL_FRAMES - 1);
     audio.currentTime = AUDIO_START_OFFSET + currentProgress * (AUDIO_END_TIME - AUDIO_START_OFFSET);
-    audio.play().catch(() => { });
+    audio.muted = false;
+    audio.volume = 1;
+    audio.play().then(() => {
+      setNeedsAudioUnlock(false);
+    }).catch(() => { });
   }
 }, []);
 
 useEffect(() => {
-  if (!ready || isHeroActive || isAboutActive) return;
+  if (!mounted || isHeroActive || isAboutActive) return;
 
   const handlePointerOrKey = () => {
     handleUserGesture();
   };
 
 window.addEventListener("pointerdown", handlePointerOrKey, { passive: true });
+window.addEventListener("touchstart", handlePointerOrKey, { passive: true });
+window.addEventListener("click", handlePointerOrKey, { passive: true });
 window.addEventListener("keydown", handlePointerOrKey, { passive: true });
 return () => {
   window.removeEventListener("pointerdown", handlePointerOrKey);
+  window.removeEventListener("touchstart", handlePointerOrKey);
+  window.removeEventListener("click", handlePointerOrKey);
   window.removeEventListener("keydown", handlePointerOrKey);
 };
-  }, [ready, isHeroActive, isAboutActive, handleUserGesture]);
+  }, [mounted, isHeroActive, isAboutActive, handleUserGesture]);
 
   // ─── Initialize audio ─────────────────────────────────────────────
   useEffect(() => {
@@ -424,10 +452,12 @@ return () => {
     if (!mounted) return;
 
     let loadedCount = 0;
+    let cancelled = false;
     const images: HTMLImageElement[] = new Array(TOTAL_FRAMES);
     imagesRef.current = images;
 
-    for (let i = 0; i < TOTAL_FRAMES; i++) {
+    const loadSplashFrame = (i: number) => {
+      if (cancelled) return;
       const frameNum = START_FRAME + i;
       const img = new window.Image();
       img.src = `${FRAME_PATH}${String(frameNum).padStart(3, "0")}${FRAME_EXT}`;
@@ -437,6 +467,7 @@ return () => {
       }
 
       const handleImageLoad = () => {
+        if (cancelled) return;
         loadedCount++;
         setLoadProgress(Math.round((loadedCount / TOTAL_FRAMES) * 100));
 
@@ -470,7 +501,32 @@ return () => {
       img.onload = handleImageLoad;
       img.onerror = handleImageLoad;
       images[i] = img;
+    };
+
+    // Load first 32 frames immediately so playback begins quickly without saturating network
+    const initialBatch = Math.min(32, TOTAL_FRAMES);
+    for (let i = 0; i < initialBatch; i++) {
+      loadSplashFrame(i);
     }
+
+    // Trickle remaining frames in batches of 16 every 60ms
+    let nextIdx = initialBatch;
+    const trickleTimer = setInterval(() => {
+      if (cancelled || nextIdx >= TOTAL_FRAMES) {
+        clearInterval(trickleTimer);
+        return;
+      }
+      const end = Math.min(TOTAL_FRAMES, nextIdx + 16);
+      for (let i = nextIdx; i < end; i++) {
+        loadSplashFrame(i);
+      }
+      nextIdx = end;
+    }, 60);
+
+    return () => {
+      cancelled = true;
+      clearInterval(trickleTimer);
+    };
   }, [mounted, drawFrame, resizeCanvas]);
 
   // ─── Auto-start video playback when ready ─────────────────────────
@@ -648,6 +704,35 @@ return () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Subtle prompt if browser autoplay policy blocked initial sound */}
+      {ready && needsAudioUnlock && !isHeroActive && !isAboutActive && (
+        <button
+          type="button"
+          onClick={handleUserGesture}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/65 hover:bg-black/80 text-[#fbf6ec] border border-[#fbf6ec]/25 backdrop-blur-md shadow-lg transition-all duration-300 animate-pulse cursor-pointer"
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+          </svg>
+          <span
+            className="text-[11px] tracking-wider uppercase"
+            style={{ fontFamily: "'Space Mono', monospace" }}
+          >
+            Click anywhere for sound
+          </span>
+        </button>
       )}
     </div>
   );

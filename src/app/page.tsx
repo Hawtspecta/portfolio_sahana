@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import SplashScreen from "@/components/SplashScreen";
 import HeroSection, { FastForwardHandoff } from "@/components/HeroSection";
-import MetaBalls from "@/components/MetaBalls";
 import AboutTransition from "@/components/AboutTransition";
 import PortfolioSection from "@/components/PortfolioSection";
 import { MAX_PROGRESS as EXPERIENCE_SECTION_MAX_PROGRESS } from "@/components/ExperienceSection";
@@ -53,17 +52,18 @@ export default function Home() {
     }
   }, []);
 
-  // Intercept hard refresh shortcuts (Ctrl+Shift+R, Ctrl+F5, Shift+F5, F5/Fn+F5 with Shift)
+  // Intercept hard refresh shortcuts (Ctrl+Shift+R, Ctrl+F5, Shift+F5) so Edge/Chrome starts fresh from the hamster
   useEffect(() => {
     const handleHardRefreshKeys = (e: KeyboardEvent) => {
-      // Ctrl+Shift+R or Cmd+Shift+R
-      const isCtrlShiftR = (e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "r" || e.key === "R");
-      // Ctrl+F5 or Shift+F5 or F5
-      const isF5 = e.key === "F5";
-      const isHardF5 = isF5 && (e.ctrlKey || e.shiftKey);
+      const isCtrlShiftR =
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        (e.key === "r" || e.key === "R" || e.code === "KeyR");
+      const isHardF5 = e.key === "F5" && (e.ctrlKey || e.shiftKey);
 
       if (isCtrlShiftR || isHardF5) {
         try {
+          (window as unknown as { __skipSessionPersist?: boolean }).__skipSessionPersist = true;
           sessionStorage.removeItem("portfolio_saved_state");
           sessionStorage.removeItem("portfolio_session_initialized");
           localStorage.removeItem("portfolio_saved_state");
@@ -72,29 +72,28 @@ export default function Home() {
     };
 
     window.addEventListener("keydown", handleHardRefreshKeys, true);
-    return () => window.removeEventListener("keydown", handleHardRefreshKeys, true);
+    document.addEventListener("keydown", handleHardRefreshKeys, true);
+    return () => {
+      window.removeEventListener("keydown", handleHardRefreshKeys, true);
+      document.removeEventListener("keydown", handleHardRefreshKeys, true);
+    };
   }, []);
 
-  // Restore screen and section state across page reloads (except when opened fresh)
+  // Restore screen and section state across normal in-tab reloads (except fresh visits or hard reload)
   useEffect(() => {
     try {
-      // Purge any legacy localStorage state so fresh visits never get locked into old sections
       localStorage.removeItem("portfolio_saved_state");
 
-      // Check whether page was opened fresh (navigate, new tab, bookmark) vs an in-tab reload
       let isReload = false;
       const navEntries = performance.getEntriesByType("navigation");
       if (navEntries.length > 0) {
-        const nav = navEntries[0] as PerformanceNavigationTiming;
-        isReload = nav.type === "reload";
-      } else if (typeof performance !== "undefined" && (performance as any).navigation) {
-        isReload = (performance as any).navigation.type === 1;
+        isReload = (navEntries[0] as PerformanceNavigationTiming).type === "reload";
+      } else if (typeof performance !== "undefined" && (performance as { navigation?: { type?: number } }).navigation) {
+        isReload = (performance as { navigation?: { type?: number } }).navigation?.type === 1;
       }
 
       const sessionInitialized = sessionStorage.getItem("portfolio_session_initialized");
 
-      // When the website is opened fresh (new tab, new window, direct navigation):
-      // Clean slate: start from splash screen and reload all sets from scratch!
       if (!isReload || !sessionInitialized) {
         sessionStorage.removeItem("portfolio_saved_state");
         sessionStorage.setItem("portfolio_session_initialized", "true");
@@ -102,12 +101,17 @@ export default function Home() {
         return;
       }
 
-      // If active in-tab reload, restore position from sessionStorage
       const raw = sessionStorage.getItem("portfolio_saved_state");
-      if (!raw) return;
+      if (!raw) {
+        hasRestoredRef.current = true;
+        return;
+      }
 
       const saved = JSON.parse(raw);
-      if (!saved || !saved.section) return;
+      if (!saved || !saved.section) {
+        hasRestoredRef.current = true;
+        return;
+      }
 
       hasRestoredRef.current = true;
       if (saved.section === "services") {
@@ -181,6 +185,7 @@ export default function Home() {
   useEffect(() => {
     // Only save after initial state restoration has completed
     if (!hasRestoredRef.current) return;
+    if ((window as unknown as { __skipSessionPersist?: boolean }).__skipSessionPersist) return;
 
     try {
       const existingRaw = sessionStorage.getItem("portfolio_saved_state");
@@ -489,66 +494,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Flanking MetaBalls — active at the Hero typewriter view, collapse/burst during About transition */}
-      {isLastFrame && (
-        <div
-          className={`fixed inset-0 z-[55] pointer-events-none transition-opacity duration-700 ease-in-out ${transitionProgress > 70 / 105 ? "hidden" : ""
-            }`}
-        >
-          {/* Left MetaBalls — 2 blobs, expansive contour rings */}
-          <div className={`absolute left-[5vw] sm:left-[7vw] lg:left-[8.5vw] top-[11%] sm:top-[13%] md:top-[14%] w-[18vw] min-w-[140px] max-w-[250px] h-[360px] max-h-[46vh] ${!isAboutActive ? "pointer-events-auto" : "pointer-events-none"}`}>
-            <MetaBalls
-              color="#000000"
-              cursorBallColor="#000000"
-              variant="contour"
-              motion="lava"
-              ballCount={2}
-              seed={19}
-              speed={0.22}
-              animationSize={24}
-              cursorBallSize={1.8}
-              clumpFactor={0.7}
-              gooeyness={0.45}
-              stretch={0.4}
-              wobble={0.6}
-              enableTransparency
-              lineWidth={1.2}
-              rings={6}
-              spacing={0.56}
-              paused={!isLastFrame || transitionProgress > 70 / 105}
-              collapseProgress={isAboutActive ? Math.min(1, transitionProgress / (70 / 105)) : 0}
-              dpr={typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 1.5) : 1}
-            />
-          </div>
-
-          {/* Right MetaBalls — 3 blobs, expansive contour rings */}
-          <div className={`absolute right-[5vw] sm:right-[7vw] lg:right-[8.5vw] top-[15%] sm:top-[17%] md:top-[18%] w-[18vw] min-w-[140px] max-w-[250px] h-[360px] max-h-[46vh] ${!isAboutActive ? "pointer-events-auto" : "pointer-events-none"}`}>
-            <MetaBalls
-              color="#000000"
-              cursorBallColor="#000000"
-              variant="contour"
-              motion="lava"
-              ballCount={3}
-              seed={83}
-              speed={0.31}
-              animationSize={26}
-              cursorBallSize={2.0}
-              clumpFactor={0.75}
-              gooeyness={0.55}
-              stretch={0.6}
-              wobble={0.4}
-              enableTransparency
-              lineWidth={1.3}
-              rings={6}
-              spacing={0.58}
-              paused={!isLastFrame || transitionProgress > 70 / 105}
-              collapseProgress={isAboutActive ? Math.min(1, transitionProgress / (70 / 105)) : 0}
-              dpr={typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 1.5) : 1}
-            />
-          </div>
-        </div>
-      )}
-
       {/* Lenis Smooth Scroll-based About Transition (106 high-DPI frames, zero glitch) */}
       <AboutTransition
         lenis={lenis}
@@ -564,8 +509,8 @@ export default function Home() {
         handoff={fastForwardHandoff}
       />
 
-      {/* Portfolio section — mounted once Splash finishes so initial load & Splash stay lightweight */}
-      {isLastFrame && (
+      {/* Portfolio section — mounted only once Transition starts so Splash & Hero keep 100% bandwidth */}
+      {(isAboutActive || isPortfolioActive) && (
         <PortfolioSection
           isActive={isAboutActive && isPortfolioActive}
           externalScrollProgress={targetPortfolioProgress}

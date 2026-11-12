@@ -915,6 +915,7 @@ export default function ExperienceSection({
 
     const persistExperienceProgress = (progValue: number) => {
       try {
+        if ((window as unknown as { __skipSessionPersist?: boolean }).__skipSessionPersist) return;
         if (!sessionStorage.getItem("portfolio_session_initialized")) return;
         const raw = sessionStorage.getItem("portfolio_saved_state");
         const existing = raw ? JSON.parse(raw) : {};
