@@ -143,7 +143,9 @@ function CtaSection({
 
             <div className="relative z-30 flex flex-wrap gap-2">
               <a
-                href="mailto:nayaksahana0307@gmail.com"
+                href="https://mail.google.com/mail/?view=cm&fs=1&to=nayaksahana0307@gmail.com"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full border-2 border-[#4a2c1d] bg-[#2b180e] text-[#fbf6ec] font-bold text-xs tracking-wide hover:scale-105 active:scale-95 transition-transform cursor-pointer"
                 style={{ fontFamily: "'Space Mono', monospace" }}
               >

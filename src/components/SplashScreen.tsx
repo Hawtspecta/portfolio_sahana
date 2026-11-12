@@ -453,8 +453,30 @@ return () => {
 
     let loadedCount = 0;
     let cancelled = false;
+    let bufferReady = false;
+    let minHamsterElapsed = wasHeroActiveRef.current || isHeroActiveRef.current;
     const images: HTMLImageElement[] = new Array(TOTAL_FRAMES);
     imagesRef.current = images;
+
+    const tryStartSplash = () => {
+      if (cancelled || hasStartedPlaybackRef.current) return;
+      if (!bufferReady || !minHamsterElapsed) return;
+      hasStartedPlaybackRef.current = true;
+      setReady(true);
+      onReadyRef.current?.();
+      resizeCanvas();
+      if (!wasHeroActiveRef.current && !isHeroActiveRef.current) {
+        targetFrameRef.current = 0;
+        smoothFrameRef.current = 0;
+        currentRenderedFrameRef.current = 0;
+        drawFrame(0);
+      }
+    };
+
+    const hamsterTimer = setTimeout(() => {
+      minHamsterElapsed = true;
+      tryStartSplash();
+    }, 2600);
 
     const loadSplashFrame = (i: number) => {
       if (cancelled) return;
@@ -484,18 +506,10 @@ return () => {
           }
         }
 
-        // Start playback as soon as initial buffer (25 frames) is ready or all frames loaded
-        if (!hasStartedPlaybackRef.current && (loadedCount >= Math.min(25, TOTAL_FRAMES) || loadedCount === TOTAL_FRAMES)) {
-          hasStartedPlaybackRef.current = true;
-          setReady(true);
-          onReadyRef.current?.();
-          resizeCanvas();
-          if (!wasHeroActiveRef.current && !isHeroActiveRef.current) {
-            targetFrameRef.current = 0;
-            smoothFrameRef.current = 0;
-            currentRenderedFrameRef.current = 0;
-            drawFrame(0);
-          }
+        // Mark buffer ready once initial buffer (25 frames) or all frames are loaded
+        if (loadedCount >= Math.min(25, TOTAL_FRAMES) || loadedCount === TOTAL_FRAMES) {
+          bufferReady = true;
+          tryStartSplash();
         }
       };
       img.onload = handleImageLoad;
@@ -525,6 +539,7 @@ return () => {
 
     return () => {
       cancelled = true;
+      clearTimeout(hamsterTimer);
       clearInterval(trickleTimer);
     };
   }, [mounted, drawFrame, resizeCanvas]);
