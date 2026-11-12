@@ -511,8 +511,8 @@ export default function Home() {
         handoff={fastForwardHandoff}
       />
 
-      {/* Portfolio section — mounted only once Transition starts so Splash & Hero keep 100% bandwidth */}
-      {(isAboutActive || isPortfolioActive) && (
+      {/* Portfolio section — mounted only near end of Transition so Transition scrubbing keeps 100% CPU/GPU */}
+      {(isPortfolioActive || (isAboutActive && transitionProgress >= 0.85)) && (
         <PortfolioSection
           isActive={isAboutActive && isPortfolioActive}
           externalScrollProgress={targetPortfolioProgress}

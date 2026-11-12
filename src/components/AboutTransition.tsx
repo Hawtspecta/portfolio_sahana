@@ -309,7 +309,7 @@ export default function AboutTransition({
       if (cancelled) return;
       const img = new window.Image();
       img.src = `${FRAME_PATH}${String(i).padStart(3, "0")}${FRAME_EXT}`;
-      if ("decode" in img) {
+      if (i <= 24 && "decode" in img) {
         img.decode().catch(() => { });
       }
 
