@@ -119,72 +119,72 @@ export default function SplashScreen({
   const hasDrawnFirstFrameRef = useRef(false);
   const hasStartedPlaybackRef = useRef(false);
 
-    // ─── Resize Canvas with Optimal Crisp Buffer ─────────────────────
-    const resizeCanvas = useCallback(() => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-      const targetW = Math.round(window.innerWidth * dpr);
-      const targetH = Math.round(window.innerHeight * dpr);
+  // ─── Resize Canvas with Optimal Crisp Buffer ─────────────────────
+  const resizeCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const targetW = Math.round(window.innerWidth * dpr);
+    const targetH = Math.round(window.innerHeight * dpr);
 
-      if (canvas.width !== targetW || canvas.height !== targetH) {
-        canvas.width = targetW;
-        canvas.height = targetH;
-      }
-    }, []);
-
-    // ─── Draw a specific frame onto the canvas ────────────────────────
-    const drawFrame = useCallback((frameIndex: number) => {
-      const canvas = canvasRef.current;
-      const ctx = canvas?.getContext("2d", { alpha: false });
-      if (!canvas || !ctx) return;
-
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-
-        const targetImg = imagesRef.current[frameIndex];
-        if (targetImg && targetImg.complete && targetImg.naturalWidth > 0) {
-          currentRenderedFrameRef.current = frameIndex;
-          ctx.drawImage(targetImg, 0, 0, canvas.width, canvas.height);
-        } else {
-          const fallbackImg = imagesRef.current[currentRenderedFrameRef.current];
-          if (fallbackImg && fallbackImg.complete && fallbackImg.naturalWidth > 0) {
-            ctx.drawImage(fallbackImg, 0, 0, canvas.width, canvas.height);
-          }
-  }
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
+    }
   }, []);
 
-    // Synchronize Hero state
-    useEffect(() => {
-      lastFrameStateRef.current = !!isHeroActive;
-      if (isHeroActive) {
-        if (activeAnimIdRef.current) {
-          cancelAnimationFrame(activeAnimIdRef.current);
-          activeAnimIdRef.current = null;
-        }
-        isPlayingRef.current = false;
-        if (audioRef.current && !audioRef.current.paused) {
-          audioRef.current.pause();
-        }
-    const lastIndex = TOTAL_FRAMES - 1;
-    targetFrameRef.current = lastIndex;
-    smoothFrameRef.current = lastIndex;
-    currentRenderedFrameRef.current = lastIndex;
-    drawFrame(lastIndex);
-    wasHeroActiveRef.current = true;
-  } else {
-    isPlayingRef.current = false;
-    isFastForwardingRef.current = false;
-    if (wasHeroActiveRef.current) {
-      const returnIndex = Math.max(0, TOTAL_FRAMES - 1);
-      targetFrameRef.current = returnIndex;
-      smoothFrameRef.current = returnIndex;
-      currentRenderedFrameRef.current = returnIndex;
-      drawFrame(returnIndex);
+  // ─── Draw a specific frame onto the canvas ────────────────────────
+  const drawFrame = useCallback((frameIndex: number) => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d", { alpha: false });
+    if (!canvas || !ctx) return;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    const targetImg = imagesRef.current[frameIndex];
+    if (targetImg && targetImg.complete && targetImg.naturalWidth > 0) {
+      currentRenderedFrameRef.current = frameIndex;
+      ctx.drawImage(targetImg, 0, 0, canvas.width, canvas.height);
+    } else {
+      const fallbackImg = imagesRef.current[currentRenderedFrameRef.current];
+      if (fallbackImg && fallbackImg.complete && fallbackImg.naturalWidth > 0) {
+        ctx.drawImage(fallbackImg, 0, 0, canvas.width, canvas.height);
+      }
     }
-    wasHeroActiveRef.current = false;
-  }
-}, [isHeroActive, ready, drawFrame]);
+  }, []);
+
+  // Synchronize Hero state
+  useEffect(() => {
+    lastFrameStateRef.current = !!isHeroActive;
+    if (isHeroActive) {
+      if (activeAnimIdRef.current) {
+        cancelAnimationFrame(activeAnimIdRef.current);
+        activeAnimIdRef.current = null;
+      }
+      isPlayingRef.current = false;
+      if (audioRef.current && !audioRef.current.paused) {
+        audioRef.current.pause();
+      }
+      const lastIndex = TOTAL_FRAMES - 1;
+      targetFrameRef.current = lastIndex;
+      smoothFrameRef.current = lastIndex;
+      currentRenderedFrameRef.current = lastIndex;
+      drawFrame(lastIndex);
+      wasHeroActiveRef.current = true;
+    } else {
+      isPlayingRef.current = false;
+      isFastForwardingRef.current = false;
+      if (wasHeroActiveRef.current) {
+        const returnIndex = Math.max(0, TOTAL_FRAMES - 1);
+        targetFrameRef.current = returnIndex;
+        smoothFrameRef.current = returnIndex;
+        currentRenderedFrameRef.current = returnIndex;
+        drawFrame(returnIndex);
+      }
+      wasHeroActiveRef.current = false;
+    }
+  }, [isHeroActive, ready, drawFrame]);
 
   // Handle external scrollbar scrubbing target progress
   useEffect(() => {
@@ -209,14 +209,14 @@ export default function SplashScreen({
         audioRef.current.currentTime = Math.min(AUDIO_END_TIME, Math.max(AUDIO_START_OFFSET, audioTime));
       }
 
-        if (frameIndex >= TOTAL_FRAMES - 2) {
-          hasReachedLastFrameRef.current = true;
-          lastFrameStateRef.current = true;
-          onLastFrameChange?.(true);
-          onCompleteRef.current?.();
-        }
+      if (frameIndex >= TOTAL_FRAMES - 2) {
+        hasReachedLastFrameRef.current = true;
+        lastFrameStateRef.current = true;
+        onLastFrameChange?.(true);
+        onCompleteRef.current?.();
       }
-    }, [targetProgress, isHeroActive, isAboutActive, drawFrame, onLastFrameChange]);
+    }
+  }, [targetProgress, isHeroActive, isAboutActive, drawFrame, onLastFrameChange]);
 
   // ─── Rocket Fast-Forward (Sequentially scrubs all splash frames at rocket speed) ───
   useEffect(() => {
@@ -224,99 +224,104 @@ export default function SplashScreen({
     if (lastHandledTriggerRef.current === fastForwardTrigger) return;
     lastHandledTriggerRef.current = fastForwardTrigger;
 
-      if (activeAnimIdRef.current) {
-        cancelAnimationFrame(activeAnimIdRef.current);
-        activeAnimIdRef.current = null;
-      }
-      isPlayingRef.current = false;
-      isFastForwardingRef.current = true;
+    if (activeAnimIdRef.current) {
+      cancelAnimationFrame(activeAnimIdRef.current);
+      activeAnimIdRef.current = null;
+    }
+    isPlayingRef.current = false;
+    isFastForwardingRef.current = true;
 
-      const lastFrameIndex = TOTAL_FRAMES - 1;
-      const startFrame = Math.max(0, Math.min(TOTAL_FRAMES - 2, Math.round(smoothFrameRef.current)));
-      const framesToFastForward = lastFrameIndex - startFrame;
+    const lastFrameIndex = TOTAL_FRAMES - 1;
+    const startFrame = Math.max(0, Math.min(TOTAL_FRAMES - 2, Math.round(smoothFrameRef.current)));
+    const framesToFastForward = lastFrameIndex - startFrame;
 
-      if (framesToFastForward <= 1) {
-        isFastForwardingRef.current = false;
-        targetFrameRef.current = lastFrameIndex;
-        smoothFrameRef.current = lastFrameIndex;
-        currentRenderedFrameRef.current = lastFrameIndex;
-        drawFrame(lastFrameIndex);
-        onProgressChangeRef.current?.(1);
-        hasReachedLastFrameRef.current = true;
-        lastFrameStateRef.current = true;
-        onLastFrameChange?.(true);
-        onCompleteRef.current?.();
-        return;
-      }
+    if (framesToFastForward <= 1) {
+      isFastForwardingRef.current = false;
+      targetFrameRef.current = lastFrameIndex;
+      smoothFrameRef.current = lastFrameIndex;
+      currentRenderedFrameRef.current = lastFrameIndex;
+      drawFrame(lastFrameIndex);
+      onProgressChangeRef.current?.(1);
+      hasReachedLastFrameRef.current = true;
+      lastFrameStateRef.current = true;
+      onLastFrameChange?.(true);
+      onCompleteRef.current?.();
+      return;
+    }
 
-        const durationMs = 1100;
-        const startTime = performance.now();
+    const durationMs = 1100;
+    const startTime = performance.now();
+    let lastEmittedPct = -1;
 
-        const fastForwardStep = (now: number) => {
-          const elapsed = now - startTime;
-          const progress = Math.min(elapsed / durationMs, 1);
-          const easedProgress = lenisSmoothRocketEase(progress);
-          const currentFrame = Math.min(lastFrameIndex, Math.round(startFrame + framesToFastForward * easedProgress));
+    const fastForwardStep = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / durationMs, 1);
+      const easedProgress = lenisSmoothRocketEase(progress);
+      const currentFrame = Math.min(lastFrameIndex, Math.round(startFrame + framesToFastForward * easedProgress));
 
       targetFrameRef.current = currentFrame;
       smoothFrameRef.current = currentFrame;
       currentRenderedFrameRef.current = currentFrame;
       drawFrame(currentFrame);
-      onProgressChangeRef.current?.(currentFrame / (TOTAL_FRAMES - 1));
+      const nextRatio = currentFrame / (TOTAL_FRAMES - 1);
+      if (nextRatio - lastEmittedPct >= 0.04 || currentFrame >= lastFrameIndex) {
+        lastEmittedPct = nextRatio;
+        onProgressChangeRef.current?.(nextRatio);
+      }
 
       // Smoothly fade out audio in tandem with rocket flight
       if (audioRef.current && !audioRef.current.paused) {
         audioRef.current.volume = Math.min(1, Math.max(0, 1 - progress * 1.5));
       }
 
-        if (progress < 1 && currentFrame < lastFrameIndex) {
-          activeAnimIdRef.current = requestAnimationFrame(fastForwardStep);
-        } else {
-          activeAnimIdRef.current = null;
-          isFastForwardingRef.current = false;
-  targetFrameRef.current = lastFrameIndex;
-  smoothFrameRef.current = lastFrameIndex;
-  currentRenderedFrameRef.current = lastFrameIndex;
-  drawFrame(lastFrameIndex);
+      if (progress < 1 && currentFrame < lastFrameIndex) {
+        activeAnimIdRef.current = requestAnimationFrame(fastForwardStep);
+      } else {
+        activeAnimIdRef.current = null;
+        isFastForwardingRef.current = false;
+        targetFrameRef.current = lastFrameIndex;
+        smoothFrameRef.current = lastFrameIndex;
+        currentRenderedFrameRef.current = lastFrameIndex;
+        drawFrame(lastFrameIndex);
 
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.volume = 1;
-    }
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.volume = 1;
+        }
 
-    hasReachedLastFrameRef.current = true;
-    lastFrameStateRef.current = true;
-    onLastFrameChange?.(true);
-    onCompleteRef.current?.();
-  }
+        hasReachedLastFrameRef.current = true;
+        lastFrameStateRef.current = true;
+        onLastFrameChange?.(true);
+        onCompleteRef.current?.();
+      }
     };
 
-activeAnimIdRef.current = requestAnimationFrame(fastForwardStep);
+    activeAnimIdRef.current = requestAnimationFrame(fastForwardStep);
 
-return () => {
-  if (activeAnimIdRef.current) {
-    cancelAnimationFrame(activeAnimIdRef.current);
-    activeAnimIdRef.current = null;
-  }
-  isFastForwardingRef.current = false;
-};
+    return () => {
+      if (activeAnimIdRef.current) {
+        cancelAnimationFrame(activeAnimIdRef.current);
+        activeAnimIdRef.current = null;
+      }
+      isFastForwardingRef.current = false;
+    };
   }, [fastForwardTrigger, isHeroActive, isAboutActive, drawFrame, onLastFrameChange]);
 
-// ─── Play Splash as Continuous Video (from Start to End) ─────────
-const startVideoPlayback = useCallback(() => {
-  if (isHeroActiveRef.current || isAboutActiveRef.current || isFastForwardingRef.current) return;
-  if (hasReachedLastFrameRef.current) return;
+  // ─── Play Splash as Continuous Video (from Start to End) ─────────
+  const startVideoPlayback = useCallback(() => {
+    if (isHeroActiveRef.current || isAboutActiveRef.current || isFastForwardingRef.current) return;
+    if (hasReachedLastFrameRef.current) return;
 
-  if (activeAnimIdRef.current) {
-    cancelAnimationFrame(activeAnimIdRef.current);
-    activeAnimIdRef.current = null;
-  }
+    if (activeAnimIdRef.current) {
+      cancelAnimationFrame(activeAnimIdRef.current);
+      activeAnimIdRef.current = null;
+    }
 
-  const startIndex = Math.min(TOTAL_FRAMES - 2, Math.max(0, currentRenderedFrameRef.current));
-  const targetIndex = TOTAL_FRAMES - 1;
-  const remainingFraction = (targetIndex - startIndex) / (TOTAL_FRAMES - 1);
-  const totalDurationMs = (AUDIO_END_TIME - AUDIO_START_OFFSET) * 1000;
-  const durationMs = Math.max(200, totalDurationMs * remainingFraction);
+    const startIndex = Math.min(TOTAL_FRAMES - 2, Math.max(0, currentRenderedFrameRef.current));
+    const targetIndex = TOTAL_FRAMES - 1;
+    const remainingFraction = (targetIndex - startIndex) / (TOTAL_FRAMES - 1);
+    const totalDurationMs = (AUDIO_END_TIME - AUDIO_START_OFFSET) * 1000;
+    const durationMs = Math.max(200, totalDurationMs * remainingFraction);
 
     isPlayingRef.current = true;
 
@@ -339,31 +344,31 @@ const startVideoPlayback = useCallback(() => {
 
     const startTime = performance.now();
 
-      const step = (now: number) => {
-        if (!isPlayingRef.current) return;
+    const step = (now: number) => {
+      if (!isPlayingRef.current) return;
 
-        const elapsed = now - startTime;
-        const progress = Math.min(elapsed / durationMs, 1);
-        const currentFrame = Math.min(
-          targetIndex,
-          Math.round(startIndex + (targetIndex - startIndex) * progress)
-        );
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / durationMs, 1);
+      const currentFrame = Math.min(
+        targetIndex,
+        Math.round(startIndex + (targetIndex - startIndex) * progress)
+      );
 
-    targetFrameRef.current = currentFrame;
-    smoothFrameRef.current = currentFrame;
-    currentRenderedFrameRef.current = currentFrame;
-    drawFrame(currentFrame);
-    onProgressChangeRef.current?.(currentFrame / (TOTAL_FRAMES - 1));
+      targetFrameRef.current = currentFrame;
+      smoothFrameRef.current = currentFrame;
+      currentRenderedFrameRef.current = currentFrame;
+      drawFrame(currentFrame);
+      onProgressChangeRef.current?.(currentFrame / (TOTAL_FRAMES - 1));
 
-if (progress < 1 && currentFrame < targetIndex) {
-  activeAnimIdRef.current = requestAnimationFrame(step);
-} else {
-  activeAnimIdRef.current = null;
-  isPlayingRef.current = false;
-  targetFrameRef.current = targetIndex;
-  smoothFrameRef.current = targetIndex;
-  currentRenderedFrameRef.current = targetIndex;
-  drawFrame(targetIndex);
+      if (progress < 1 && currentFrame < targetIndex) {
+        activeAnimIdRef.current = requestAnimationFrame(step);
+      } else {
+        activeAnimIdRef.current = null;
+        isPlayingRef.current = false;
+        targetFrameRef.current = targetIndex;
+        smoothFrameRef.current = targetIndex;
+        currentRenderedFrameRef.current = targetIndex;
+        drawFrame(targetIndex);
 
         if (audioRef.current) {
           audioRef.current.pause();
@@ -375,58 +380,58 @@ if (progress < 1 && currentFrame < targetIndex) {
         onLastFrameChange?.(true);
         onCompleteRef.current?.();
       }
-};
+    };
 
-  activeAnimIdRef.current = requestAnimationFrame(step);
-}, [drawFrame, onLastFrameChange]);
+    activeAnimIdRef.current = requestAnimationFrame(step);
+  }, [drawFrame, onLastFrameChange]);
 
-// Un-mute / unlock / play audio on user interaction (including during loading)
-const handleUserGesture = useCallback(() => {
-  const audio = audioRef.current;
-  if (!audio) return;
+  // Un-mute / unlock / play audio on user interaction (including during loading)
+  const handleUserGesture = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
 
-  if (!isPlayingRef.current) {
-    // Unlock audio context silently during loading so autoplay succeeds when video starts
-    audio.muted = true;
-    audio.play().then(() => {
-      audio.pause();
+    if (!isPlayingRef.current) {
+      // Unlock audio context silently during loading so autoplay succeeds when video starts
+      audio.muted = true;
+      audio.play().then(() => {
+        audio.pause();
+        audio.muted = false;
+        audio.currentTime = AUDIO_START_OFFSET;
+        setNeedsAudioUnlock(false);
+      }).catch(() => {
+        audio.muted = false;
+      });
+      return;
+    }
+
+    if (audio.paused) {
+      const currentProgress = currentRenderedFrameRef.current / (TOTAL_FRAMES - 1);
+      audio.currentTime = AUDIO_START_OFFSET + currentProgress * (AUDIO_END_TIME - AUDIO_START_OFFSET);
       audio.muted = false;
-      audio.currentTime = AUDIO_START_OFFSET;
-      setNeedsAudioUnlock(false);
-    }).catch(() => {
-      audio.muted = false;
-    });
-    return;
-  }
+      audio.volume = 1;
+      audio.play().then(() => {
+        setNeedsAudioUnlock(false);
+      }).catch(() => { });
+    }
+  }, []);
 
-  if (audio.paused) {
-    const currentProgress = currentRenderedFrameRef.current / (TOTAL_FRAMES - 1);
-    audio.currentTime = AUDIO_START_OFFSET + currentProgress * (AUDIO_END_TIME - AUDIO_START_OFFSET);
-    audio.muted = false;
-    audio.volume = 1;
-    audio.play().then(() => {
-      setNeedsAudioUnlock(false);
-    }).catch(() => { });
-  }
-}, []);
+  useEffect(() => {
+    if (!mounted || isHeroActive || isAboutActive) return;
 
-useEffect(() => {
-  if (!mounted || isHeroActive || isAboutActive) return;
+    const handlePointerOrKey = () => {
+      handleUserGesture();
+    };
 
-  const handlePointerOrKey = () => {
-    handleUserGesture();
-  };
-
-window.addEventListener("pointerdown", handlePointerOrKey, { passive: true });
-window.addEventListener("touchstart", handlePointerOrKey, { passive: true });
-window.addEventListener("click", handlePointerOrKey, { passive: true });
-window.addEventListener("keydown", handlePointerOrKey, { passive: true });
-return () => {
-  window.removeEventListener("pointerdown", handlePointerOrKey);
-  window.removeEventListener("touchstart", handlePointerOrKey);
-  window.removeEventListener("click", handlePointerOrKey);
-  window.removeEventListener("keydown", handlePointerOrKey);
-};
+    window.addEventListener("pointerdown", handlePointerOrKey, { passive: true });
+    window.addEventListener("touchstart", handlePointerOrKey, { passive: true });
+    window.addEventListener("click", handlePointerOrKey, { passive: true });
+    window.addEventListener("keydown", handlePointerOrKey, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerOrKey);
+      window.removeEventListener("touchstart", handlePointerOrKey);
+      window.removeEventListener("click", handlePointerOrKey);
+      window.removeEventListener("keydown", handlePointerOrKey);
+    };
   }, [mounted, isHeroActive, isAboutActive, handleUserGesture]);
 
   // ─── Initialize audio ─────────────────────────────────────────────
@@ -441,26 +446,27 @@ return () => {
     }
     audioRef.current = audio;
 
-  return () => {
-    audio.pause();
-    audio.src = "";
-  };
-}, [mounted]);
+    return () => {
+      audio.pause();
+      audio.src = "";
+    };
+  }, [mounted]);
 
-  // ─── Preload all frames ───────────────────────────────────────────
+  // ─── Preload all frames & site assets during loading hamster ──────
   useEffect(() => {
     if (!mounted) return;
 
-    let loadedCount = 0;
     let cancelled = false;
-    let bufferReady = false;
-    let minHamsterElapsed = wasHeroActiveRef.current || isHeroActiveRef.current;
+    const isSkippingSplash = wasHeroActiveRef.current || isHeroActiveRef.current;
+    let splashBufferReady = false;
+    let allAssetsReady = isSkippingSplash;
+    let minHamsterElapsed = isSkippingSplash;
     const images: HTMLImageElement[] = new Array(TOTAL_FRAMES);
     imagesRef.current = images;
 
     const tryStartSplash = () => {
       if (cancelled || hasStartedPlaybackRef.current) return;
-      if (!bufferReady || !minHamsterElapsed) return;
+      if (!splashBufferReady || !allAssetsReady || !minHamsterElapsed) return;
       hasStartedPlaybackRef.current = true;
       setReady(true);
       onReadyRef.current?.();
@@ -478,102 +484,192 @@ return () => {
       tryStartSplash();
     }, 2600);
 
-    const loadSplashFrame = (i: number) => {
-      if (cancelled) return;
-      const frameNum = START_FRAME + i;
-      const img = new window.Image();
-      img.src = `${FRAME_PATH}${String(frameNum).padStart(3, "0")}${FRAME_EXT}`;
+      // Build ordered asset preload queue: Splash -> BG -> Hero -> Transition -> Projects -> Experience
+      type QueueItem =
+        | { kind: "splash"; index: number; url: string }
+        | { kind: "image"; url: string }
+        | { kind: "fetch"; url: string };
 
-      if ("decode" in img) {
-        img.decode().catch(() => { });
+      const queue: QueueItem[] = [];
+      for (let i = 0; i < TOTAL_FRAMES; i++) {
+        const frameNum = START_FRAME + i;
+        queue.push({
+          kind: "splash",
+          index: i,
+          url: `${FRAME_PATH}${String(frameNum).padStart(3, "0")}${FRAME_EXT}`,
+        });
       }
 
-      const handleImageLoad = () => {
-        if (cancelled) return;
-        loadedCount++;
-        setLoadProgress(Math.round((loadedCount / TOTAL_FRAMES) * 100));
+      if (!isSkippingSplash) {
+        const staticImages = [
+          "/assets/transition/bg_port.webp",
+          "/assets/transition/pc.webp",
+          "/assets/experience_tab.webp",
+          "/assets/small_experience.webp",
+          "/assets/skip button.png",
+          "/assets/project_tab_lawbot.png",
+          "/assets/project_tab_ufi.png",
+          "/assets/project_tab_brew.png",
+          "/assets/project_tab_india.png",
+          "/assets/project_tab_resume.png",
+          "/assets/raw_project_tab_lawbot.png",
+          "/assets/raw_project_tab_ufi.png",
+          "/assets/raw_project_tab_brew.png",
+          "/assets/raw_project_tab_india.png",
+          "/assets/raw_project_tab_resume.png",
+          "/assets/experience/1.webp",
+          "/assets/experience/2.webp",
+          "/assets/experience/3.webp",
+          "/assets/experience/4.webp",
+          "/assets/experience/5.webp",
+          "/assets/experience/6.webp",
+          "/assets/experience/7.webp",
+          "/assets/experience/8.webp",
+          "/assets/invizn/boho_mehfil_screenshot_upscaled.png",
+          "/assets/invizn/Pastel Wedding Venue Design Studio.png",
+          "/assets/invizn/venue_arch_upscaled_2x.jpg",
+          "/assets/invizn/wedding_stage_upscaled_2x.jpg",
+          "/assets/freelance/glamator_spotlight.jpg",
+          "/assets/freelance/myriad_ecosystem.png",
+          "/assets/freelance/myriad_journey.jpg",
+          "/assets/freelance/myriad_services.png",
+          "/assets/certificates/adf-certificate.png",
+          "/assets/certificates/google-aiml-certificate.png",
+          "/assets/certificates/jpmc-software-engineering.png",
+          "/assets/certificates/nptel-cert.png",
+        ];
 
-        // Immediately draw the 1st frame as soon as frame 0 arrives (< 50ms)
-        if (!hasDrawnFirstFrameRef.current && images[0]?.complete && images[0]?.naturalWidth > 0) {
-          hasDrawnFirstFrameRef.current = true;
-          setFirstFrameReady(true);
-          resizeCanvas();
-          if (!wasHeroActiveRef.current && !isHeroActiveRef.current) {
-            targetFrameRef.current = 0;
-            smoothFrameRef.current = 0;
-            currentRenderedFrameRef.current = 0;
-            drawFrame(0);
-          }
+        for (const url of staticImages) {
+          queue.push({ kind: "image", url });
         }
+        queue.push({ kind: "fetch", url: "/assets/transition/pc_click.mp4" });
 
-        // Mark buffer ready once initial buffer (25 frames) or all frames are loaded
-        if (loadedCount >= Math.min(25, TOTAL_FRAMES) || loadedCount === TOTAL_FRAMES) {
-          bufferReady = true;
+        for (let i = 1; i <= 119; i++) {
+          queue.push({
+            kind: "image",
+            url: `/assets/hero_frames/${String(i).padStart(3, "0")}.webp`,
+          });
+        }
+        for (let i = 1; i <= 106; i++) {
+          queue.push({
+            kind: "image",
+            url: `/assets/transition/${String(i).padStart(3, "0")}.webp`,
+          });
+        }
+      }
+
+      const totalAssets = queue.length;
+      let completedAssets = 0;
+      let splashLoadedCount = 0;
+      let cursor = 0;
+      const preloadedCache: HTMLImageElement[] = [];
+
+      const onAssetDone = () => {
+        if (cancelled) return;
+        completedAssets++;
+        setLoadProgress(Math.min(100, Math.round((completedAssets / totalAssets) * 100)));
+        if (completedAssets >= totalAssets) {
+          allAssetsReady = true;
           tryStartSplash();
         }
       };
-      img.onload = handleImageLoad;
-      img.onerror = handleImageLoad;
-      images[i] = img;
-    };
 
-    // Load first 32 frames immediately so playback begins quickly without saturating network
-    const initialBatch = Math.min(32, TOTAL_FRAMES);
-    for (let i = 0; i < initialBatch; i++) {
-      loadSplashFrame(i);
-    }
+      const runNext = () => {
+        if (cancelled || cursor >= queue.length) return;
+        const item = queue[cursor++];
 
-    // Trickle remaining frames in batches of 16 every 60ms
-    let nextIdx = initialBatch;
-    const trickleTimer = setInterval(() => {
-      if (cancelled || nextIdx >= TOTAL_FRAMES) {
-        clearInterval(trickleTimer);
-        return;
-      }
-      const end = Math.min(TOTAL_FRAMES, nextIdx + 16);
-      for (let i = nextIdx; i < end; i++) {
-        loadSplashFrame(i);
-      }
-      nextIdx = end;
-    }, 60);
+        if (item.kind === "fetch") {
+          fetch(item.url)
+            .catch(() => { })
+            .finally(() => {
+              onAssetDone();
+              runNext();
+            });
+          return;
+        }
 
-    return () => {
-      cancelled = true;
-      clearTimeout(hamsterTimer);
-      clearInterval(trickleTimer);
-    };
-  }, [mounted, drawFrame, resizeCanvas]);
+        const img = new window.Image();
+        img.src = item.url;
+        if ("decode" in img) {
+          img.decode().catch(() => { });
+        }
+
+          if (item.kind === "splash") {
+            images[item.index] = img;
+          } else {
+            preloadedCache.push(img);
+          }
+
+          const handleLoad = () => {
+            if (cancelled) return;
+                if (item.kind === "splash") {
+                  splashLoadedCount++;
+                  if (!hasDrawnFirstFrameRef.current && images[0]?.complete && images[0]?.naturalWidth > 0) {
+                    hasDrawnFirstFrameRef.current = true;
+                    setFirstFrameReady(true);
+                    resizeCanvas();
+                    if (!wasHeroActiveRef.current && !isHeroActiveRef.current) {
+                      targetFrameRef.current = 0;
+                      smoothFrameRef.current = 0;
+                      currentRenderedFrameRef.current = 0;
+                      drawFrame(0);
+                    }
+                  }
+                  if (splashLoadedCount >= Math.min(25, TOTAL_FRAMES) || splashLoadedCount === TOTAL_FRAMES) {
+                    splashBufferReady = true;
+                    tryStartSplash();
+                  }
+                }
+                onAssetDone();
+                runNext();
+              };
+
+            img.onload = handleLoad;
+            img.onerror = handleLoad;
+          };
+
+            const CONCURRENCY = 10;
+            for (let w = 0; w < Math.min(CONCURRENCY, queue.length); w++) {
+              runNext();
+            }
+
+            return () => {
+              cancelled = true;
+              clearTimeout(hamsterTimer);
+              preloadedCache.length = 0;
+            };
+          }, [mounted, drawFrame, resizeCanvas]);
 
   // ─── Auto-start video playback when ready ─────────────────────────
   useEffect(() => {
-      if (ready && !isHeroActive && !isAboutActive && !hasReachedLastFrameRef.current) {
-        startVideoPlayback();
+    if (ready && !isHeroActive && !isAboutActive && !hasReachedLastFrameRef.current) {
+      startVideoPlayback();
+    }
+  }, [ready, isHeroActive, isAboutActive, startVideoPlayback]);
+
+  // ─── Window Resize Handler ────────────────────────────────────────
+  useEffect(() => {
+    const handleResize = () => {
+      resizeCanvas();
+      drawFrame(currentRenderedFrameRef.current);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [resizeCanvas, drawFrame]);
+
+  // Clean up animations on unmount
+  useEffect(() => {
+    return () => {
+      if (activeAnimIdRef.current) {
+        cancelAnimationFrame(activeAnimIdRef.current);
+        activeAnimIdRef.current = null;
       }
-    }, [ready, isHeroActive, isAboutActive, startVideoPlayback]);
-
-    // ─── Window Resize Handler ────────────────────────────────────────
-    useEffect(() => {
-      const handleResize = () => {
-        resizeCanvas();
-        drawFrame(currentRenderedFrameRef.current);
-      };
-      window.addEventListener("resize", handleResize);
-      return () => window.removeEventListener("resize", handleResize);
-    }, [resizeCanvas, drawFrame]);
-
-        // Clean up animations on unmount
-        useEffect(() => {
-          return () => {
-            if (activeAnimIdRef.current) {
-              cancelAnimationFrame(activeAnimIdRef.current);
-              activeAnimIdRef.current = null;
-            }
-            isPlayingRef.current = false;
-            if (audioRef.current && !audioRef.current.paused) {
-              audioRef.current.pause();
-            }
-          };
-        }, []);
+      isPlayingRef.current = false;
+      if (audioRef.current && !audioRef.current.paused) {
+        audioRef.current.pause();
+      }
+    };
+  }, []);
 
   if (!mounted) {
     if (isHeroActive || isAboutActive) {

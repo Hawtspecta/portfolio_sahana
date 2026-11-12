@@ -312,23 +312,27 @@ export default function PortfolioSection({
     };
   }, [isActive]);
 
-  // Preload & decode all expanded project tab images as soon as PortfolioSection mounts so expanding any tab is instant
+  // Preload & decode all expanded project tab images once Portfolio is active (avoiding contention during Transition skip)
   useEffect(() => {
+    if (!isActive) return;
     const preloaded: HTMLImageElement[] = [];
-    for (const item of PROJECT_ITEMS) {
-      for (const url of [item.expandSrc, item.src]) {
-        const img = new window.Image();
-        img.src = url;
-        if ("decode" in img) {
-          img.decode().catch(() => { });
+    const timer = setTimeout(() => {
+      for (const item of PROJECT_ITEMS) {
+        for (const url of [item.expandSrc, item.src]) {
+          const img = new window.Image();
+          img.src = url;
+          if ("decode" in img) {
+            img.decode().catch(() => { });
+          }
+          preloaded.push(img);
         }
-        preloaded.push(img);
       }
-    }
+    }, 150);
     return () => {
+      clearTimeout(timer);
       preloaded.length = 0;
     };
-  }, []);
+  }, [isActive]);
 
   // Vertical scroll state: 0 = at PC (About Me), 1 = at Creations (MY CREATIONS.EXE), 2 = at What We Ship
   const [scrollPos, setScrollPos] = useState(() => {

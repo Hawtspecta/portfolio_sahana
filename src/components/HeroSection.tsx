@@ -218,6 +218,7 @@ export default function HeroSection({
     }
 
     const startTime = performance.now();
+    let lastEmittedPct = -1;
 
     const fastForwardStep = (now: number) => {
       const elapsed = now - startTime;
@@ -230,7 +231,11 @@ export default function HeroSection({
       targetFrameRef.current = currentFrame;
       smoothFrameRef.current = currentFrame;
       drawFrame(currentFrame);
-      onProgressChangeRef.current?.(currentFrame / lastFrameIndex);
+      const nextRatio = currentFrame / lastFrameIndex;
+      if (nextRatio - lastEmittedPct >= 0.04 || currentFrame >= lastFrameIndex) {
+        lastEmittedPct = nextRatio;
+        onProgressChangeRef.current?.(nextRatio);
+      }
 
       if (globalEased < heroFraction && currentFrame < lastFrameIndex) {
         fastForwardAnimIdRef.current = requestAnimationFrame(fastForwardStep);

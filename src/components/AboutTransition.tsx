@@ -255,6 +255,7 @@ export default function AboutTransition({
     const startTime = hasHandoff ? currentHandoff.startTime : performance.now();
     const totalDurationMs = hasHandoff ? currentHandoff.totalDurationMs : 1000;
     const heroFraction = hasHandoff ? currentHandoff.heroFraction : 0;
+    let lastEmittedPct = -1;
 
     const fastForwardStep = (now: number) => {
       const elapsed = now - startTime;
@@ -271,7 +272,11 @@ export default function AboutTransition({
       targetFrameRef.current = currentFrame;
       smoothFrameRef.current = currentFrame;
       drawFrame(currentFrame);
-      onProgressChangeRef.current?.(currentFrame / lastFrameIndex);
+      const nextRatio = currentFrame / lastFrameIndex;
+      if (nextRatio - lastEmittedPct >= 0.04 || currentFrame >= lastFrameIndex) {
+        lastEmittedPct = nextRatio;
+        onProgressChangeRef.current?.(nextRatio);
+      }
 
       if (globalProgress < 1 && currentFrame < lastFrameIndex) {
         fastForwardAnimIdRef.current = requestAnimationFrame(fastForwardStep);

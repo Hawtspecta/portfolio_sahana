@@ -181,45 +181,50 @@ export default function Home() {
     }
   }, []);
 
-  // Persist current screen and progress state to survive reloads (session-only, never cross-session localStorage)
+  // Persist current screen and progress state to survive reloads (throttled so 60fps scroll/skip never stutters)
   useEffect(() => {
     // Only save after initial state restoration has completed
     if (!hasRestoredRef.current) return;
     if ((window as unknown as { __skipSessionPersist?: boolean }).__skipSessionPersist) return;
 
-    try {
-      const existingRaw = sessionStorage.getItem("portfolio_saved_state");
-      const existing = existingRaw ? JSON.parse(existingRaw) : {};
+    const timer = setTimeout(() => {
+      if ((window as unknown as { __skipSessionPersist?: boolean }).__skipSessionPersist) return;
+      try {
+        const existingRaw = sessionStorage.getItem("portfolio_saved_state");
+        const existing = existingRaw ? JSON.parse(existingRaw) : {};
 
-      const currentSection = !isLastFrame
-        ? "splash"
-        : !isAboutActive
-          ? "hero"
-          : transitionProgress < 0.98
-            ? "transition"
-            : isProjectLiveExpanded
-              ? "expanded_project"
-              : portfolioScrollProgress >= 1.5
-                ? "services"
-                : portfolioScrollProgress >= 0.5
-                  ? "projects"
-                  : "about";
+        const currentSection = !isLastFrame
+          ? "splash"
+          : !isAboutActive
+            ? "hero"
+            : transitionProgress < 0.98
+              ? "transition"
+              : isProjectLiveExpanded
+                ? "expanded_project"
+                : portfolioScrollProgress >= 1.5
+                  ? "services"
+                  : portfolioScrollProgress >= 0.5
+                    ? "projects"
+                    : "about";
 
-      const stateToSave = {
-        ...existing,
-        section: currentSection,
-        isLastFrame,
-        isAboutActive,
-        heroProgress,
-        transitionProgress,
-        portfolioScrollProgress,
-        splashProgress,
-        timestamp: Date.now(),
-      };
-      sessionStorage.setItem("portfolio_saved_state", JSON.stringify(stateToSave));
-    } catch {
-      // Storage unavailable or quota exceeded
-    }
+        const stateToSave = {
+          ...existing,
+          section: currentSection,
+          isLastFrame,
+          isAboutActive,
+          heroProgress,
+          transitionProgress,
+          portfolioScrollProgress,
+          splashProgress,
+          timestamp: Date.now(),
+        };
+        sessionStorage.setItem("portfolio_saved_state", JSON.stringify(stateToSave));
+      } catch {
+        // Storage unavailable or quota exceeded
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
   }, [
     isLastFrame,
     isAboutActive,
