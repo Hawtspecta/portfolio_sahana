@@ -8,15 +8,27 @@ import ScrollExpand, { ScrollExpandHandle } from "@/components/ScrollExpand";
 import MagicBento from "@/components/MagicBento";
 import { getMagicBentoItems } from "@/data/projectData";
 import Dock, { DockItemData } from "@/components/Dock";
-import WhatWeShipSection from "@/components/WhatWeShipSection";
+import MaskedHeading from "@/components/ui/MaskedHeading";
+import ExperienceSection, {
+  ACHIEVEMENTS_GALLERY_STOP,
+  CERTIFICATIONS_BOOK_STOP,
+  EDU_STOP_1,
+  EDU_STOP_2,
+  EDU_STOP_3,
+  CTA_STOP,
+  SKILLS_FOLDERS_STOP,
+  SectionZone,
+} from "@/components/ExperienceSection";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  Award01Icon,
+  BookOpen01Icon,
+  Briefcase01Icon,
   CodeIcon,
+  File01Icon,
   Folder01Icon,
-  Home01Icon,
-  Layers01Icon,
+  GraduationCapIcon,
   Mail01Icon,
-  MusicNote03Icon,
   UserCircle02Icon,
 } from "@hugeicons/core-free-icons";
 
@@ -24,6 +36,8 @@ interface PortfolioSectionProps {
   isActive: boolean;
   externalScrollProgress?: number | null;
   onPortfolioProgressChange?: (progress: number) => void;
+  externalExperienceProgress?: number | null;
+  onExperienceProgressChange?: (progress: number) => void;
   onScrollBackToTransition?: () => void;
   onScrollToHeroStart?: () => void;
   onExpandedStateChange?: (isExpanded: boolean) => void;
@@ -47,43 +61,43 @@ const ABOUT_SENTENCES = [
 
 const PROJECT_ITEMS = [
   {
-    src: "/assets/project_tab_lawbot.webp",
+    src: "/assets/project_tab_lawbot.png",
     alt: "AI Law Bot",
     title: "AI LAW BOT",
     subtitle: "Legal Intelligence Platform",
-    expandSrc: "/assets/raw_project_tab_lawbot.webp",
+    expandSrc: "/assets/raw_project_tab_lawbot.png",
     demoUrl: "https://ai-law-bot-nu.vercel.app/",
   },
   {
-    src: "/assets/project_tab_ufi.webp",
+    src: "/assets/project_tab_ufi.png",
     alt: "UFI",
     title: "UFI",
-    subtitle: "Next-Gen Web Platform",
-    expandSrc: "/assets/raw_project_tab_ufi.webp",
+    subtitle: "Aadhaar Update Friction Index",
+    expandSrc: "/assets/raw_project_tab_ufi.png",
     demoUrl: "https://ufi-omega.vercel.app/",
   },
   {
-    src: "/assets/project_tab_brew.webp",
+    src: "/assets/project_tab_brew.png",
     alt: "Urban Brew",
     title: "URBAN BREW",
     subtitle: "Artisanal Coffee & Experience",
-    expandSrc: "/assets/raw_project_tab_brew.webp",
+    expandSrc: "/assets/raw_project_tab_brew.png",
     demoUrl: "https://urban-brew-ten.vercel.app/",
   },
   {
-    src: "/assets/project_tab_india.webp",
+    src: "/assets/project_tab_india.png",
     alt: "India Connect Hub",
     title: "INDIA CONNECT HUB",
-    subtitle: "Community & Network Hub",
-    expandSrc: "/assets/raw_project_tab_india.webp",
+    subtitle: "Cultural Storytelling Hub",
+    expandSrc: "/assets/raw_project_tab_india.png",
     demoUrl: "https://india-connect-hub.vercel.app/",
   },
   {
-    src: "/assets/project_tab_resume.webp",
+    src: "/assets/project_tab_resume.png",
     alt: "AI Resume Analyzer",
     title: "AI RESUME ANALYZER",
-    subtitle: "Career & Resume Optimization",
-    expandSrc: "/assets/raw_project_tab_resume.webp",
+    subtitle: "ATS & Resume Optimization",
+    expandSrc: "/assets/raw_project_tab_resume.png",
     demoUrl: "https://ai-resume-analyzer-dun-one.vercel.app/",
   },
 ];
@@ -190,6 +204,8 @@ export default function PortfolioSection({
   isActive,
   externalScrollProgress,
   onPortfolioProgressChange,
+  externalExperienceProgress,
+  onExperienceProgressChange,
   onScrollBackToTransition,
   onScrollToHeroStart,
   onExpandedStateChange,
@@ -205,8 +221,8 @@ export default function PortfolioSection({
   useEffect(() => {
     projectsStageRef.current = projectsStage;
   }, [projectsStage]);
-  const [sectionZone, setSectionZone] = useState<"experience" | "skills">("experience");
-  const [whatWeShipStopRequest, setWhatWeShipStopRequest] = useState<{ stop: number; id: number } | null>(null);
+  const [sectionZone, setSectionZone] = useState<SectionZone>("experience");
+  const [experienceStopRequest, setExperienceStopRequest] = useState<{ stop: number; id: number } | null>(null);
   const [expandProgress, setExpandProgress] = useState(0);
   const initialExpandedRef = useRef(false);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
@@ -307,14 +323,23 @@ useEffect(() => {
   scrollPosRef.current = scrollPos;
 }, [scrollPos]);
 
+const hasRestoredPortfolioRef = useRef(false);
+
 // Restore saved project viewer state on mount (runs exclusively on client in-tab reload, preventing hydration mismatch)
 useEffect(() => {
+  let rafId = 0;
   try {
     localStorage.removeItem("portfolio_saved_state");
     const raw = sessionStorage.getItem("portfolio_saved_state");
-    if (!raw) return;
+    if (!raw) {
+      hasRestoredPortfolioRef.current = true;
+      return;
+    }
     const saved = JSON.parse(raw);
-    if (!saved) return;
+    if (!saved) {
+      hasRestoredPortfolioRef.current = true;
+      return;
+    }
 
     if (saved.expandedProjectTitle) {
       const found = PROJECT_ITEMS.find((p) => p.title === saved.expandedProjectTitle);
@@ -340,11 +365,20 @@ useEffect(() => {
     } else if (saved.section === "projects") {
       setScrollPos(1);
       scrollPosRef.current = 1;
+      const stage = saved.projectsStage === "carousel" ? "carousel" : "intro";
+      setProjectsStage(stage);
+      projectsStageRef.current = stage;
     }
     if (saved.isVideoPlaying) {
       setIsVideoPlaying(true);
     }
   } catch { }
+  rafId = requestAnimationFrame(() => {
+    hasRestoredPortfolioRef.current = true;
+  });
+  return () => {
+    if (rafId) cancelAnimationFrame(rafId);
+  };
 }, []);
 const [servicesCardIndex, setServicesCardIndex] = useState(0);
 const arrivalLockUntilRef = useRef(0);
@@ -366,18 +400,22 @@ useEffect(() => {
   onScrollBackToTransitionRef.current = onScrollBackToTransition;
 }, [onScrollBackToTransition]);
 
+const [isResumeOpen, setIsResumeOpen] = useState(false);
+
 const onExpandedStateChangeRef = useRef(onExpandedStateChange);
 useEffect(() => {
   onExpandedStateChangeRef.current = onExpandedStateChange;
 }, [onExpandedStateChange]);
 
 useEffect(() => {
-  const isExpanded = (!!selectedProject && expandProgress >= 0.95) || isVideoPlaying;
+  const isExpanded =
+    (!!selectedProject && expandProgress >= 0.95) || isVideoPlaying || isResumeOpen;
   onExpandedStateChangeRef.current?.(isExpanded);
-}, [selectedProject, expandProgress, isVideoPlaying]);
+}, [selectedProject, expandProgress, isVideoPlaying, isResumeOpen]);
 
 // Save expanded project & modal state to session storage
 useEffect(() => {
+  if (!hasRestoredPortfolioRef.current) return;
   try {
     const existingRaw = sessionStorage.getItem("portfolio_saved_state");
     const existing = existingRaw ? JSON.parse(existingRaw) : {};
@@ -388,11 +426,12 @@ useEffect(() => {
       isLiveExpanded: selectedProject ? expandProgress >= 0.95 : false,
       isInfoOpen: selectedProject ? isInfoOpen : false,
       isVideoPlaying: isVideoPlaying,
+      projectsStage: projectsStage,
     };
 
     sessionStorage.setItem("portfolio_saved_state", JSON.stringify(updated));
   } catch { }
-}, [selectedProject, expandProgress, isInfoOpen, isVideoPlaying]);
+}, [selectedProject, expandProgress, isInfoOpen, isVideoPlaying, projectsStage]);
 
 const isFirstMountRef = useRef(true);
 useEffect(() => {
@@ -471,33 +510,17 @@ if (isProjectsIntroVisible !== prevProjectsIntroVisible) {
   }
 }
 
-const jumpToWhatWeShipStop = useCallback(
+const jumpToExperienceStop = useCallback(
   (stop: number) => {
     updateScrollPos(2);
-    setWhatWeShipStopRequest({ stop, id: Date.now() + Math.random() });
+    setExperienceStopRequest({ stop, id: Date.now() + Math.random() });
   },
   [updateScrollPos]
 );
 
 const glyph = useCallback((icon: any) => <HugeiconsIcon icon={icon} size="1.25em" strokeWidth={1.8} />, []);
-const [isMusicActive, setIsMusicActive] = useState(true);
 
 const dockItems: DockItemData[] = useMemo(() => [
-  {
-    icon: glyph(Home01Icon),
-    label: 'Home',
-    onClick: () => {
-      onScrollToHeroStart?.();
-    },
-    menu: [
-      { label: 'Hero (1st Frame)', onClick: () => onScrollToHeroStart?.() },
-      { separator: true },
-      { label: "Who's Behind the Screen", onClick: () => updateScrollPos(0) },
-      { label: 'My Creations.exe (5 Projects)', onClick: () => updateScrollPos(1, "carousel") },
-      { label: 'My Experience (2 Roles)', onClick: () => jumpToWhatWeShipStop(2.2) },
-      { label: 'My Toolkit (4 Skill Folders)', onClick: () => jumpToWhatWeShipStop(7.2) },
-    ]
-  },
   {
     icon: glyph(UserCircle02Icon),
     label: 'About',
@@ -508,10 +531,12 @@ const dockItems: DockItemData[] = useMemo(() => [
     menu: [
       { label: "Who's Behind the Screen?", onClick: () => updateScrollPos(0) },
       { separator: true },
-      { label: 'Back to Hero', onClick: () => onScrollToHeroStart?.() },
-      { label: 'Go to My Creations (5)', onClick: () => updateScrollPos(1) },
-      { label: 'Go to Experience (2)', onClick: () => jumpToWhatWeShipStop(2.2) },
-      { label: 'Go to Skills (4)', onClick: () => jumpToWhatWeShipStop(7.2) },
+      { label: 'Go to My Creations (5)', onClick: () => updateScrollPos(1, "carousel") },
+      { label: 'Go to Experience (2)', onClick: () => jumpToExperienceStop(2.2) },
+      { label: 'Go to Achievements (3)', onClick: () => jumpToExperienceStop(ACHIEVEMENTS_GALLERY_STOP) },
+      { label: 'Go to Skills (4)', onClick: () => jumpToExperienceStop(SKILLS_FOLDERS_STOP) },
+      { label: 'Go to Certifications (4)', onClick: () => jumpToExperienceStop(CERTIFICATIONS_BOOK_STOP) },
+      { label: 'Go to Education (3)', onClick: () => jumpToExperienceStop(EDU_STOP_1) },
     ]
   },
   {
@@ -520,7 +545,7 @@ const dockItems: DockItemData[] = useMemo(() => [
     badge: 5,
     active: scrollPos === 1,
     onClick: () => {
-      updateScrollPos(1);
+      updateScrollPos(1, "carousel");
     },
     menu: [
       { label: 'My Creations.exe (5 Projects)', onClick: () => updateScrollPos(1, "carousel") },
@@ -533,23 +558,35 @@ const dockItems: DockItemData[] = useMemo(() => [
     ]
   },
   {
-    icon: glyph(Layers01Icon),
+    icon: glyph(Briefcase01Icon),
     label: 'Experience',
     badge: 2,
     active: scrollPos === 2 && sectionZone === "experience",
     onClick: () => {
-      if (sectionZone === "skills") {
-        jumpToWhatWeShipStop(2.2);
-      } else {
-        updateScrollPos(2);
-      }
+      jumpToExperienceStop(2.2);
     },
     menu: [
-      { label: 'My Experience (2 Roles)', onClick: () => jumpToWhatWeShipStop(2.2) },
+      { label: 'My Experience (2 Roles)', onClick: () => jumpToExperienceStop(2.2) },
       { separator: true },
-      { label: '01. InVizn — AI/ML Intern', onClick: () => jumpToWhatWeShipStop(2.2) },
-      { label: '02. Freelance — Web Developer', onClick: () => jumpToWhatWeShipStop(3.2) },
-      { label: '03. Leadership & Initiatives', onClick: () => jumpToWhatWeShipStop(5.2) },
+      { label: '01. InVizn — AI/ML Intern', onClick: () => jumpToExperienceStop(2.2) },
+      { label: '02. Freelance — Web Developer', onClick: () => jumpToExperienceStop(3.2) },
+      { label: '03. Leadership & Initiatives', onClick: () => jumpToExperienceStop(5.2) },
+    ]
+  },
+  {
+    icon: glyph(Award01Icon),
+    label: 'Achievements',
+    badge: 3,
+    active: scrollPos === 2 && sectionZone === "achievements",
+    onClick: () => {
+      jumpToExperienceStop(ACHIEVEMENTS_GALLERY_STOP);
+    },
+    menu: [
+      { label: 'Wins & Milestones (WINS.JSON)', onClick: () => jumpToExperienceStop(ACHIEVEMENTS_GALLERY_STOP) },
+      { separator: true },
+      { label: '01. Code for Good 2026 — Finalist', onClick: () => jumpToExperienceStop(ACHIEVEMENTS_GALLERY_STOP) },
+      { label: '02. Pixel Paranoia 2026 — Runner-Up', onClick: () => jumpToExperienceStop(ACHIEVEMENTS_GALLERY_STOP) },
+      { label: '03. CodeQuest — 3rd Place', onClick: () => jumpToExperienceStop(ACHIEVEMENTS_GALLERY_STOP) },
     ]
   },
   {
@@ -558,42 +595,102 @@ const dockItems: DockItemData[] = useMemo(() => [
     badge: 4,
     active: scrollPos === 2 && sectionZone === "skills",
     onClick: () => {
-      jumpToWhatWeShipStop(7.2);
+      jumpToExperienceStop(SKILLS_FOLDERS_STOP);
     },
     menu: [
-      { label: 'My Toolkit (4 Folders)', onClick: () => jumpToWhatWeShipStop(7.2) },
+      { label: 'My Toolkit (4 Folders)', onClick: () => jumpToExperienceStop(SKILLS_FOLDERS_STOP) },
       { separator: true },
-      { label: '01. Programming', onClick: () => jumpToWhatWeShipStop(7.2) },
-      { label: '02. Frontend', onClick: () => jumpToWhatWeShipStop(7.2) },
-      { label: '03. Backend', onClick: () => jumpToWhatWeShipStop(7.2) },
-      { label: '04. AI / ML', onClick: () => jumpToWhatWeShipStop(7.2) },
+      { label: '01. Programming', onClick: () => jumpToExperienceStop(SKILLS_FOLDERS_STOP) },
+      { label: '02. Frontend', onClick: () => jumpToExperienceStop(SKILLS_FOLDERS_STOP) },
+      { label: '03. Backend', onClick: () => jumpToExperienceStop(SKILLS_FOLDERS_STOP) },
+      { label: '04. AI / ML', onClick: () => jumpToExperienceStop(SKILLS_FOLDERS_STOP) },
+    ]
+  },
+  {
+    icon: glyph(BookOpen01Icon),
+    label: 'Certifications',
+    badge: 4,
+    active: scrollPos === 2 && sectionZone === "certifications",
+    onClick: () => {
+      jumpToExperienceStop(CERTIFICATIONS_BOOK_STOP);
+    },
+    menu: [
+      { label: 'Certifications (CERTIFICATIONS.TXT)', onClick: () => jumpToExperienceStop(CERTIFICATIONS_BOOK_STOP) },
+      { separator: true },
+      { label: '01. JPMorgan Chase — SWE', onClick: () => jumpToExperienceStop(CERTIFICATIONS_BOOK_STOP) },
+      { label: '02. Google AI-ML Virtual Internship', onClick: () => jumpToExperienceStop(CERTIFICATIONS_BOOK_STOP) },
+      { label: '03. IBM — Flutter & Dart', onClick: () => jumpToExperienceStop(CERTIFICATIONS_BOOK_STOP) },
+      { label: '04. NPTEL — Virtual Reality', onClick: () => jumpToExperienceStop(CERTIFICATIONS_BOOK_STOP) },
+    ]
+  },
+  {
+    icon: glyph(GraduationCapIcon),
+    label: 'Education',
+    badge: 3,
+    active: scrollPos === 2 && sectionZone === "education",
+    onClick: () => {
+      jumpToExperienceStop(EDU_STOP_1);
+    },
+    menu: [
+      { label: 'Education Road (3 Stops)', onClick: () => jumpToExperienceStop(EDU_STOP_1) },
+      { separator: true },
+      { label: '01. SSC — Dr. S. Radhakrishnan (94%)', onClick: () => jumpToExperienceStop(EDU_STOP_1) },
+      { label: '02. HSC — Patkar-Varde College (92.33%)', onClick: () => jumpToExperienceStop(EDU_STOP_2) },
+      { label: '03. B.Tech AI & ML — DJSCE (9.5 CGPA)', onClick: () => jumpToExperienceStop(EDU_STOP_3) },
     ]
   },
   { separator: true },
   {
-    icon: glyph(Mail01Icon),
-    label: 'Mail',
+    icon: glyph(File01Icon),
+    label: 'Resume',
+    active: isResumeOpen,
     onClick: () => {
-      window.location.href = "mailto:sahanasnayak@gmail.com";
+      setIsResumeOpen(true);
     },
     menu: [
-      { label: 'Compose Email', onClick: () => { window.location.href = "mailto:sahanasnayak@gmail.com"; } },
+      {
+        label: 'View Resume (On Site)',
+        onClick: () => {
+          setIsResumeOpen(true);
+        }
+      },
       { separator: true },
-      { label: 'Copy Email Address', onClick: () => { navigator.clipboard?.writeText("sahanasnayak@gmail.com"); } }
+      {
+        label: 'Download Resume (PDF)',
+        onClick: () => {
+          const a = document.createElement("a");
+          a.href = "/assets/Sahana_Nayak_Resume%20(8).pdf";
+          a.download = "Sahana_Nayak_Resume.pdf";
+          a.click();
+        }
+      }
     ]
   },
   {
-    icon: glyph(MusicNote03Icon),
-    label: isMusicActive ? 'Music' : 'Music (Muted)',
-    className: isMusicActive ? '' : 'opacity-70',
+    icon: glyph(Mail01Icon),
+    label: 'Contact',
+    active: scrollPos === 2 && sectionZone === "contact",
     onClick: () => {
-      setIsMusicActive(prev => !prev);
+      jumpToExperienceStop(CTA_STOP);
     },
     menu: [
-      { label: isMusicActive ? 'Mute Sound' : 'Play Sound', onClick: () => setIsMusicActive(prev => !prev) }
+      { label: 'Say Hi (Contact)', onClick: () => jumpToExperienceStop(CTA_STOP) },
+      { separator: true },
+      {
+        label: 'Email: nayaksahana0307@gmail.com',
+        onClick: () => {
+          window.location.href = "mailto:nayaksahana0307@gmail.com";
+        }
+      },
+      {
+        label: 'GitHub',
+        onClick: () => {
+          window.open("https://github.com/Hawtspecta", "_blank", "noopener,noreferrer");
+        }
+      }
     ]
   }
-], [glyph, scrollPos, sectionZone, isMusicActive, onScrollToHeroStart, updateScrollPos, jumpToWhatWeShipStop, setCurrentTab]);
+], [glyph, scrollPos, sectionZone, isResumeOpen, updateScrollPos, jumpToExperienceStop, setCurrentTab]);
 
 // Restart starting wobble and reset section states whenever active state changes
 if (isActive !== prevActive) {
@@ -728,9 +825,9 @@ const handleCloseProject = useCallback(() => {
   arrivalLockUntilRef.current = Date.now() + 500;
   scrollDownAccumulatorRef.current = 0;
   scrollUpAccumulatorRef.current = 0;
-  // Guarantee screen stays on Creations (MY CREATIONS.EXE) if that's where the tab was opened
+  // Guarantee screen stays on MY CREATIONS.EXE carousel when closing an open project tab
   if (scrollPosRef.current === 1) {
-    updateScrollPos(1);
+    updateScrollPos(1, "carousel");
   }
 }, [updateScrollPos]);
 
@@ -740,6 +837,10 @@ useEffect(() => {
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
+      if (isResumeOpen) {
+        setIsResumeOpen(false);
+        return;
+      }
       if (isInfoOpenRef.current) {
         setIsInfoOpen(false);
         isInfoOpenRef.current = false;
@@ -792,18 +893,13 @@ useEffect(() => {
         } else {
           carouselRef.current?.step(-1);
         }
-      } else if (scrollPos === 0) {
-        if (Date.now() < aboutArrivalCooldownUntilRef.current) {
-          return;
-        }
-        onScrollBackToTransitionRef.current?.();
       }
     }
   };
 
   window.addEventListener("keydown", handleKeyDown);
   return () => window.removeEventListener("keydown", handleKeyDown);
-}, [isActive, isVideoPlaying, selectedProject, expandProgress, isInfoOpen, scrollPos, projectsStage, currentTab, updateScrollPos, enterProjectsCarousel, handleScrollUpFromCarousel, handleScrollUpToAbout, handleCloseVideo, handleCloseProject]);
+}, [isActive, isResumeOpen, isVideoPlaying, selectedProject, expandProgress, isInfoOpen, scrollPos, projectsStage, currentTab, updateScrollPos, enterProjectsCarousel, handleScrollUpFromCarousel, handleScrollUpToAbout, handleCloseVideo, handleCloseProject]);
 
 // Wheel listener: smooth natural scroll between About and Creations
 const handleWheel = useCallback(
@@ -826,7 +922,7 @@ const handleWheel = useCallback(
           scrollDownResetTimeoutRef.current = null;
         }
 
-        const requiredThreshold = !hasStoppedAtAboutRef.current ? 160 : 100;
+        const requiredThreshold = !hasStoppedAtAboutRef.current ? 110 : 80;
         scrollDownAccumulatorRef.current += e.deltaY;
 
         if (scrollDownAccumulatorRef.current >= requiredThreshold) {
@@ -841,27 +937,7 @@ const handleWheel = useCallback(
       } else if (e.deltaY < 0) {
         e.stopPropagation();
         scrollDownAccumulatorRef.current = 0;
-
-        if (Date.now() < aboutArrivalCooldownUntilRef.current) {
-          return;
-        }
-
-        if (scrollUpResetTimeoutRef.current) {
-          clearTimeout(scrollUpResetTimeoutRef.current);
-          scrollUpResetTimeoutRef.current = null;
-        }
-
-        const REQUIRED_UP_THRESHOLD = -120;
-        scrollUpAccumulatorRef.current += e.deltaY;
-
-        if (scrollUpAccumulatorRef.current <= REQUIRED_UP_THRESHOLD) {
-          scrollUpAccumulatorRef.current = 0;
-          onScrollBackToTransitionRef.current?.();
-        } else {
-          scrollUpResetTimeoutRef.current = setTimeout(() => {
-            scrollUpAccumulatorRef.current = 0;
-          }, 450);
-        }
+        scrollUpAccumulatorRef.current = 0;
       }
     } else if (scrollPos === 1) {
       // In Creations section (Projects Intro -> MY CREATIONS.EXE):
@@ -950,28 +1026,30 @@ return (
       aria-hidden="true"
     />
 
-    {/* LetterGlitch effect layered on top of bg_port */}
-    <div
-      className="absolute top-0 left-0 right-0 h-[92%] pointer-events-none opacity-55 overflow-hidden transition-opacity duration-500"
-      style={scrollPos === 0 ? dynamicMaskStyle : undefined}
-    >
-      <LetterGlitch
-        glitchColors={["#000000", "#059669", "#10b981"]}
-        baseColor="#000000"
-        glitchAmount={0.25}
-        speed={0.9}
-        flow={0.5}
-        clickEffect="tear"
-        density={0.88}
-        dpr={typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 1.5) : 1}
-      />
-    </div>
+    {/* LetterGlitch effect layered on top of bg_port (paused/unmounted when inside ExperienceSection or modals) */}
+    {isActive && scrollPos < 2 && !selectedProject && !showVideo && (
+      <div
+        className="absolute top-0 left-0 right-0 h-[92%] pointer-events-none opacity-55 overflow-hidden transition-opacity duration-500"
+        style={scrollPos === 0 ? dynamicMaskStyle : undefined}
+      >
+        <LetterGlitch
+          glitchColors={["#000000", "#059669", "#10b981"]}
+          baseColor="#000000"
+          glitchAmount={0.25}
+          speed={0.9}
+          flow={0.5}
+          clickEffect="tear"
+          density={0.88}
+          dpr={typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 1.5) : 1}
+        />
+      </div>
+    )}
 
     {/* ─── CONTINUOUS SCROLL CONTAINER: SECTION 1 + SECTION 2 ─── */}
     {/* Strictly bounded between top and the brown horizon bar (0% to 92%). Nothing ever crosses onto the horizon! */}
     <div className="absolute top-0 left-0 right-0 h-[92%] overflow-hidden z-10">
       <div
-        className="w-full h-full will-change-transform transition-transform duration-600 ease-out"
+        className="w-full h-full will-change-transform transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
         style={{
           transform: `translate3d(0, -${scrollPos * 100}%, 0)`,
         }}
@@ -1163,20 +1241,22 @@ return (
               : "opacity-0 translate-y-[45%] pointer-events-none"
               }`}
           >
-            {/* Heading: MY CREATIONS.EXE (Left-aligned with tabs/ribbons, tight gap below) */}
-            <div className="relative z-10 w-[78vw] max-w-[1460px] mx-auto flex flex-col items-start justify-start text-left mt-0 mb-0">
-              <h2
-                className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-neutral-900 drop-shadow-sm mb-1 creations-heading transition-colors duration-500"
-                style={{ fontFamily: "'Special Elite', cursive" }}
-              >
-                MY CREATIONS.EXE
-              </h2>
-              <p
-                className="text-xs sm:text-sm text-neutral-800/80 font-mono tracking-wide creations-subheading transition-colors duration-500"
-                style={{ fontFamily: "'Special Elite', cursive" }}
-              >
-                Explore projects in horizontal liquid view &bull; Click to expand
-              </p>
+            {/* Heading: MY CREATIONS.EXE (Same size & top-left alignment as EDUCATION.MD) */}
+            <div className="relative z-10 w-[84vw] max-w-[1060px] mx-auto flex flex-col items-start justify-start text-left mt-0 mb-0">
+              <MaskedHeading
+                title="MY CREATIONS.EXE"
+                subtitle="Explore projects in horizontal liquid view • Click to expand"
+                isIn={isActive && scrollPos === 1 && projectsStage === "carousel"}
+                titleClassName="text-3xl sm:text-4xl lg:text-[2.85rem] font-bold tracking-tight drop-shadow-sm mb-0.5 creations-heading transition-colors duration-500"
+                subtitleClassName="text-xs sm:text-sm font-mono tracking-wide creations-subheading transition-colors duration-500"
+                titleStyle={{
+                  color: "var(--exp-headline-color, #2b180e)",
+                  textShadow: "var(--exp-text-shadow, none)",
+                }}
+                subtitleStyle={{
+                  color: "var(--exp-subtext-color, #3d2314)",
+                }}
+              />
             </div>
 
             {/* FlexCarousel with 5 tabs (Exact width between ribbons, large tabs, cloud blur at disappearing ends) */}
@@ -1301,13 +1381,16 @@ return (
         {/* ═══════════════════════════════════════════════════════════════ */}
         {/* SECTION 3: WHAT WE SHIP / BRAND APPART SERVICES                 */}
         {/* ═══════════════════════════════════════════════════════════════ */}
-        <div className={`relative w-full h-full overflow-hidden flex flex-col items-center justify-start transition-opacity duration-300 ${isActive && scrollPos === 2 ? "pointer-events-auto opacity-100 visible" : "pointer-events-none opacity-0 invisible"}`}>
-          <WhatWeShipSection
+        <div className={`relative w-full h-full overflow-hidden flex flex-col items-center justify-start transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${isActive && scrollPos === 2 ? "pointer-events-auto opacity-100 visible" : "pointer-events-none opacity-0 invisible"}`}>
+          <ExperienceSection
             isActive={isActive && scrollPos === 2}
             activeCardIndex={servicesCardIndex}
             onActiveCardChange={setServicesCardIndex}
-            externalStopRequest={whatWeShipStopRequest}
+            externalStopRequest={experienceStopRequest}
+            externalScrubProgress={externalExperienceProgress}
+            onProgressChange={onExperienceProgressChange}
             onSectionZoneChange={setSectionZone}
+            onOpenResume={() => setIsResumeOpen(true)}
             onScrollUpToCreations={() => {
               updateScrollPos(1, "carousel");
               setCurrentTab(PROJECT_ITEMS.length - 1);
@@ -1393,23 +1476,12 @@ return (
       <button
         type="button"
         onClick={handleCloseVideo}
-        className="absolute top-5 right-5 sm:top-7 sm:right-7 z-20 flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-black/60 hover:bg-black/85 text-white/90 hover:text-white backdrop-blur-md transition-all duration-200 hover:scale-110 active:scale-95 shadow-2xl border border-white/20 cursor-pointer group"
+        className="absolute top-5 right-5 sm:top-7 sm:right-7 z-20 flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#4a2c1d] bg-[#fdf6ec] text-[#2b180e] shadow-[2px_2px_0_#4a2c1d] hover:bg-[#f3e1c3] cursor-pointer transition-transform hover:scale-105 active:scale-95"
         aria-label="Close view"
         title="Close (Esc)"
       >
-        <svg
-          width="22"
-          height="22"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="transition-transform duration-200 group-hover:rotate-90"
-        >
-          <line x1="18" y1="6" x2="6" y2="18" />
-          <line x1="6" y1="6" x2="18" y2="18" />
+        <svg width="16" height="16" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M4 4l10 10M14 4L4 14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
         </svg>
       </button>
     </div>
@@ -1427,26 +1499,15 @@ return (
           <button
             type="button"
             onClick={handleCloseProject}
-            className={`absolute top-5 right-5 sm:top-7 sm:right-7 z-50 flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-white/10 hover:bg-white/20 text-white/90 hover:text-white backdrop-blur-md transition-all duration-300 hover:scale-110 active:scale-95 shadow-2xl border border-white/20 cursor-pointer group ${expandProgress >= 0.95
+            className={`absolute top-5 right-5 sm:top-7 sm:right-7 z-50 flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#4a2c1d] bg-[#fdf6ec] text-[#2b180e] shadow-[2px_2px_0_#4a2c1d] hover:bg-[#f3e1c3] transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer ${expandProgress >= 0.95
               ? "opacity-0 pointer-events-none scale-75"
               : "opacity-100 pointer-events-auto scale-100"
               }`}
             aria-label="Close project view"
             title="Close (Esc)"
           >
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="transition-transform duration-200 group-hover:rotate-90"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
+            <svg width="16" height="16" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+              <path d="M4 4l10 10M14 4L4 14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
             </svg>
           </button>
 
@@ -1492,26 +1553,33 @@ return (
                 }}
               >
                 {/* Top Bar with Live Project Header & Direct Zoom Out Button */}
-                <div className="relative z-30 flex items-center justify-between px-6 py-3 bg-neutral-950/80 backdrop-blur-md border-b border-white/10 select-none">
+                <div className="relative z-30 flex items-center justify-between px-4 sm:px-6 py-2.5 bg-neutral-950/80 backdrop-blur-md border-b border-white/10 select-none">
                   <div className="flex items-center gap-3">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-sm font-semibold tracking-wider text-[#fbf6ec] font-mono uppercase">
+                    <span
+                      className="text-sm sm:text-base font-bold tracking-wider text-[#fbf6ec] uppercase"
+                      style={{ fontFamily: "'Special Elite', cursive" }}
+                    >
                       {selectedProject.title}
                     </span>
-                    <span className="text-xs text-[#fbf6ec]/60 font-mono hidden sm:inline">
+                    <span
+                      className="text-xs text-[#fbf6ec]/60 font-mono hidden sm:inline"
+                      style={{ fontFamily: "'Space Mono', monospace" }}
+                    >
                       &bull; {selectedProject.subtitle}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2.5 sm:gap-3">
-                    {/* Info / Dossier Button (? or i) */}
+                    {/* Info / Dossier Button */}
                     <button
                       type="button"
                       onClick={() => setIsInfoOpen((prev) => !prev)}
-                      className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs sm:text-sm font-mono font-medium tracking-wide border transition-all duration-200 cursor-pointer shadow-lg hover:scale-105 active:scale-95 ${isInfoOpen
+                      className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs sm:text-sm font-mono font-medium tracking-wide border transition-all duration-200 cursor-pointer shadow-lg hover:scale-105 active:scale-95 ${isInfoOpen
                         ? "bg-emerald-500/30 text-emerald-300 border-emerald-400/60 shadow-emerald-500/20"
                         : "bg-white/10 hover:bg-white/25 text-white/90 hover:text-white border-white/20 hover:border-white/40 shadow-white/10"
                         }`}
+                      style={{ fontFamily: "'Space Mono', monospace" }}
                       title={isInfoOpen ? "Close info & return to live site" : "View Project Overview, Features & Tech Stack"}
                     >
                       {isInfoOpen ? (
@@ -1541,7 +1609,8 @@ return (
                       href={selectedProject.demoUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 hover:text-emerald-100 text-xs sm:text-sm font-mono font-medium tracking-wide border border-emerald-500/35 hover:border-emerald-400/60 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-lg hover:shadow-emerald-500/20"
+                      className="flex items-center gap-2 px-5 py-2 rounded-full bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 hover:text-emerald-100 text-xs sm:text-sm font-mono font-medium tracking-wide border border-emerald-500/35 hover:border-emerald-400/60 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-lg hover:shadow-emerald-500/20"
+                      style={{ fontFamily: "'Space Mono', monospace" }}
                       title="Open live site in new tab"
                     >
                       <span>Open site</span>
@@ -1571,7 +1640,8 @@ return (
                         }
                         scrollExpandRef.current?.scrollToTop();
                       }}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/25 text-white/90 hover:text-white text-xs sm:text-sm font-mono font-medium tracking-wide border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-lg hover:shadow-white/10 mr-2"
+                      className="flex items-center gap-2 px-5 py-2 rounded-full bg-white/10 hover:bg-white/25 text-white/90 hover:text-white text-xs sm:text-sm font-mono font-medium tracking-wide border border-white/20 hover:border-white/40 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-lg hover:shadow-white/10 mr-2"
+                      style={{ fontFamily: "'Space Mono', monospace" }}
                       title={isInfoOpen ? "Close info & return to live site" : "Zoom out back to overview (or scroll up)"}
                     >
                       <svg
@@ -1591,75 +1661,83 @@ return (
                   </div>
                 </div>
 
-                {/* Live Iframe with native-site-cursor enabled for the site's own cursor */}
-                <div className={`relative flex-1 w-full h-full overflow-hidden ${isInfoOpen ? "hidden" : "block native-site-cursor"}`}>
-                  {/* Hamster Wheel Loading Animation — only visible if loading takes > 300ms */}
-                  {showLoader && isIframeLoading && (
-                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-neutral-950 pointer-events-none transition-opacity duration-300">
-                      <div
-                        aria-label="Orange and tan hamster running in a metal wheel"
-                        role="img"
-                        className="wheel-and-hamster"
-                      >
-                        <div className="wheel" />
-                        <div className="hamster">
-                          <div className="hamster__body">
-                            <div className="hamster__head">
-                              <div className="hamster__ear" />
-                              <div className="hamster__eye" />
-                              <div className="hamster__nose" />
-                            </div>
-                            <div className="hamster__limb hamster__limb--fr" />
-                            <div className="hamster__limb hamster__limb--fl" />
-                            <div className="hamster__limb hamster__limb--br" />
-                            <div className="hamster__limb hamster__limb--bl" />
-                            <div className="hamster__tail" />
-                          </div>
-                        </div>
-                        <div className="spoke" />
-                      </div>
-                      <p
-                        className="mt-6 text-xs sm:text-sm text-[#fbf6ec]/80 font-mono tracking-widest uppercase animate-pulse"
-                        style={{ fontFamily: "'Special Elite', cursive" }}
-                      >
-                        Loading live site...
-                      </p>
-                    </div>
-                  )}
-
-                  <iframe
-                    src={selectedProject.demoUrl}
-                    title={selectedProject.title}
-                    onLoad={handleIframeLoad}
-                    className="w-full h-full border-none bg-neutral-900"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                    loading="lazy"
-                  />
-                </div>
-
-                {/* Information Overlay with MagicBento Grid */}
-                {isInfoOpen && (
+                {/* Live Iframe + Info Overlay Container (keep iframe mounted & laid out so closing Info is instant) */}
+                <div className="relative flex-1 w-full h-full overflow-hidden">
                   <div
-                    className="relative z-20 flex-1 w-full h-full overflow-y-auto bg-neutral-950/95 backdrop-blur-2xl p-4 sm:p-6 md:p-8 flex flex-col items-center"
-                    onWheel={(e) => {
-                      // Isolate scrolling completely inside info overlay: never bubble to zoom-out handler!
-                      e.stopPropagation();
-                    }}
-                    onTouchMove={(e) => {
-                      e.stopPropagation();
-                    }}
+                    aria-hidden={isInfoOpen}
+                    className={`absolute inset-0 w-full h-full overflow-hidden ${isInfoOpen ? "pointer-events-none" : "native-site-cursor"}`}
                   >
+                    {/* Hamster Wheel Loading Animation — only visible if loading takes > 300ms */}
+                    {showLoader && isIframeLoading && (
+                      <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-neutral-950 pointer-events-none transition-opacity duration-300">
+                        <div
+                          aria-label="Orange and tan hamster running in a metal wheel"
+                          role="img"
+                          className="wheel-and-hamster"
+                        >
+                          <div className="wheel" />
+                          <div className="hamster">
+                            <div className="hamster__body">
+                              <div className="hamster__head">
+                                <div className="hamster__ear" />
+                                <div className="hamster__eye" />
+                                <div className="hamster__nose" />
+                              </div>
+                              <div className="hamster__limb hamster__limb--fr" />
+                              <div className="hamster__limb hamster__limb--fl" />
+                              <div className="hamster__limb hamster__limb--br" />
+                              <div className="hamster__limb hamster__limb--bl" />
+                              <div className="hamster__tail" />
+                            </div>
+                          </div>
+                          <div className="spoke" />
+                        </div>
+                        <p
+                          className="mt-6 text-xs sm:text-sm text-[#fbf6ec]/80 font-mono tracking-widest uppercase animate-pulse"
+                          style={{ fontFamily: "'Special Elite', cursive" }}
+                        >
+                          Loading live site...
+                        </p>
+                      </div>
+                    )}
+
+                    <iframe
+                      src={selectedProject.demoUrl}
+                      title={selectedProject.title}
+                      onLoad={handleIframeLoad}
+                      className="w-full h-full border-none bg-neutral-900"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                      loading="eager"
+                    />
+                  </div>
+
+                  {/* Information Overlay with MagicBento Grid */}
+                  {isInfoOpen && (
+                    <div
+                      className="absolute inset-0 z-20 w-full h-full overflow-y-auto bg-neutral-950/95 backdrop-blur-2xl p-4 sm:p-6 md:p-8 flex flex-col items-center"
+                      onWheel={(e) => {
+                        e.stopPropagation();
+                      }}
+                      onTouchMove={(e) => {
+                        e.stopPropagation();
+                      }}
+                    >
                     <div className="w-full max-w-5xl my-auto py-4">
                       {/* Dossier Header */}
                       <div className="flex items-center justify-between mb-5 pb-3 border-b border-white/10 select-none">
                         <div className="flex items-center gap-3">
-                          <span className="px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono text-xs uppercase tracking-wider">
+                          <span
+                            className="px-3 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs uppercase tracking-wider"
+                            style={{ fontFamily: "'Space Mono', monospace" }}
+                          >
                             Project Information
                           </span>
-
                         </div>
-                        <span className="text-xs text-[#fbf6ec]/60 font-mono tracking-wide">
+                        <span
+                          className="text-xs text-[#fbf6ec]/60 tracking-wide"
+                          style={{ fontFamily: "'Space Mono', monospace" }}
+                        >
                           Press Esc to return
                         </span>
                       </div>
@@ -1667,8 +1745,8 @@ return (
                       {/* Magic Bento Grid */}
                       <MagicBento
                         columns={4}
-                        rowHeight={200}
-                        gap={12}
+                        rowHeight={280}
+                        gap={18}
                         radius={20}
                         enableBorderGlow={true}
                         enableSpotlight={true}
@@ -1681,12 +1759,69 @@ return (
                     </div>
                   </div>
                 )}
+                </div>
               </div>
             )}
           </div>
         </>
       )}
     </div>
+
+    {/* In-App Resume PDF Viewer Modal */}
+    {isResumeOpen && (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Sahana Nayak Resume"
+        onClick={() => setIsResumeOpen(false)}
+        onWheel={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-[90] flex items-center justify-center bg-[#1c0f08]/75 backdrop-blur-sm p-3 sm:p-6"
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="relative w-[94vw] max-w-[980px] h-[88vh] flex flex-col rounded-lg border-2 border-[#4a2c1d] bg-[#fdf6ec] shadow-[6px_6px_0_#4a2c1d] overflow-visible"
+        >
+          <button
+            type="button"
+            onClick={() => setIsResumeOpen(false)}
+            aria-label="Close resume viewer"
+            title="Close (Esc)"
+            className="absolute -top-3.5 -right-3.5 z-20 flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#4a2c1d] bg-[#fdf6ec] text-[#2b180e] shadow-[2px_2px_0_#4a2c1d] hover:bg-[#f3e1c3] cursor-pointer transition-transform hover:scale-105 active:scale-95"
+          >
+            <svg width="16" height="16" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+              <path d="M4 4l10 10M14 4L4 14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+            </svg>
+          </button>
+
+          <div className="flex items-center justify-between px-4 sm:px-5 py-2.5 border-b-2 border-[#4a2c1d] bg-[#f3e1c3] rounded-t-[6px]">
+            <span
+              className="text-sm sm:text-base font-bold tracking-wider text-[#2b180e]"
+              style={{ fontFamily: "'Special Elite', cursive" }}
+            >
+              SAHANA_NAYAK_RESUME.PDF
+            </span>
+            <div className="flex items-center gap-2 pr-3">
+              <a
+                href="/assets/Sahana_Nayak_Resume%20(8).pdf"
+                download="Sahana_Nayak_Resume.pdf"
+                className="px-3 py-1 rounded border border-[#4a2c1d] bg-[#fdf6ec] text-[11px] font-bold tracking-wider uppercase text-[#2b180e] shadow-[2px_2px_0_#4a2c1d] hover:bg-[#efe0ce] cursor-pointer transition-transform hover:-translate-y-0.5"
+                style={{ fontFamily: "'Space Mono', monospace" }}
+              >
+                Download ↓
+              </a>
+            </div>
+          </div>
+
+          <div className="flex-1 w-full bg-[#e9dcc9] rounded-b-[6px] overflow-hidden native-site-cursor">
+            <iframe
+              src="/assets/Sahana_Nayak_Resume%20(8).pdf#view=FitH"
+              title="Sahana Nayak Resume"
+              className="w-full h-full border-0"
+            />
+          </div>
+        </div>
+      </div>
+    )}
   </div>
 );
 }

@@ -118,11 +118,11 @@ export default function SplashScreen({
   const hasDrawnFirstFrameRef = useRef(false);
   const hasStartedPlaybackRef = useRef(false);
 
-    // ─── Resize Canvas with Native High-DPI Retina Buffer ─────────
+    // ─── Resize Canvas with Optimal Crisp Buffer ─────────────────────
     const resizeCanvas = useCallback(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const dpr = Math.max(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       const targetW = Math.round(window.innerWidth * dpr);
       const targetH = Math.round(window.innerHeight * dpr);
 
@@ -135,7 +135,7 @@ export default function SplashScreen({
     // ─── Draw a specific frame onto the canvas ────────────────────────
     const drawFrame = useCallback((frameIndex: number) => {
       const canvas = canvasRef.current;
-      const ctx = canvas?.getContext("2d");
+      const ctx = canvas?.getContext("2d", { alpha: false });
       if (!canvas || !ctx) return;
 
       ctx.imageSmoothingEnabled = true;
@@ -545,6 +545,29 @@ return () => {
               style={{ width: "0%" }}
             />
           </div>
+          <div className="mt-4 flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-[#fbf6ec]/20 bg-white/5 text-[#fbf6ec]/75">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0 text-[#fbf6ec]/85"
+            >
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+            </svg>
+            <span
+              className="text-[11px] sm:text-xs tracking-wider uppercase"
+              style={{ fontFamily: "'Space Mono', monospace" }}
+            >
+              Turn on volume for best experience
+            </span>
+          </div>
         </div>
       </div>
     );
@@ -599,6 +622,29 @@ return () => {
                 className="h-full bg-[#fbf6ec]/80 rounded-full transition-all duration-200"
                 style={{ width: `${loadProgress}%` }}
               />
+            </div>
+            <div className="mt-4 flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-[#fbf6ec]/20 bg-white/5 text-[#fbf6ec]/75">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="shrink-0 text-[#fbf6ec]/85"
+              >
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+              </svg>
+              <span
+                className="text-[11px] sm:text-xs tracking-wider uppercase"
+                style={{ fontFamily: "'Space Mono', monospace" }}
+              >
+                Turn on volume for best experience
+              </span>
             </div>
           </div>
         </div>

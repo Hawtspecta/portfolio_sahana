@@ -11,7 +11,7 @@ interface LampToggleProps {
 export default function LampToggle({
   className = "",
   onThemeChange,
-  defaultTheme = "dark",
+  defaultTheme = "light",
 }: LampToggleProps) {
   const [theme, setTheme] = useState<"dark" | "light">(defaultTheme);
   const [isPulling, setIsPulling] = useState(false);
@@ -104,7 +104,7 @@ export default function LampToggle({
 
     // Notify listener safely outside React's render/updater phase
     setTimeout(() => {
-      const current = (document.documentElement.getAttribute("data-theme") as "dark" | "light") || "dark";
+      const current = (document.documentElement.getAttribute("data-theme") as "dark" | "light") || "light";
       onThemeChangeRef.current?.(current);
     }, 0);
 

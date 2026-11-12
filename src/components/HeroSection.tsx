@@ -5,6 +5,7 @@ import Lenis from "lenis";
 import { lenisSmoothRocketEase } from "@/lib/lenis";
 
 const TOTAL_FRAMES = 119;
+const HERO_RUNWAY_PX = 2200;
 const FRAME_PATH = "/assets/hero_frames/ezgif-frame-";
 const FRAME_EXT = ".webp";
 
@@ -16,6 +17,7 @@ export interface FastForwardHandoff {
 
 interface HeroSectionProps {
   isActive: boolean;
+  canPreload?: boolean;
   isAboutActive?: boolean;
   onHeroComplete?: () => void;
   onScrollPastHero?: () => void;
@@ -28,6 +30,7 @@ interface HeroSectionProps {
 
 export default function HeroSection({
   isActive,
+  canPreload = true,
   isAboutActive = false,
   onHeroComplete,
   onScrollPastHero,
@@ -37,6 +40,10 @@ export default function HeroSection({
   fastForwardTrigger,
 }: HeroSectionProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scrollWrapperRef = useRef<HTMLDivElement>(null);
+  const scrollContentRef = useRef<HTMLDivElement>(null);
+  const localLenisRef = useRef<Lenis | null>(null);
   const imagesRef = useRef<HTMLImageElement[]>([]);
 
   const initialFrame = isAboutActive
@@ -46,9 +53,8 @@ export default function HeroSection({
     : 0;
   const targetFrameRef = useRef(initialFrame);
   const smoothFrameRef = useRef(initialFrame);
-  const lastDrawnFrameRef = useRef(initialFrame);
+  const lastDrawnFrameRef = useRef(-1);
   const hasDrawnInitialRef = useRef(false);
-  const scrubAnimIdRef = useRef<number | null>(null);
   const hasCompletedRef = useRef(false);
   const isAboutActiveRef = useRef(isAboutActive);
   const wasAboutActiveRef = useRef(false);
@@ -84,18 +90,18 @@ export default function HeroSection({
   const imagesLoadedRef = useRef(false);
   const loadedCountRef = useRef(0);
 
-  // ─── 1. Resize Canvas with Native High-DPI Retina Buffer ─────────
+  // ─── 1. Resize Canvas with Optimal Crisp Buffer (fast 60/120fps) ──
   const resizeCanvas = useCallback((): boolean => {
     const canvas = canvasRef.current;
     if (!canvas) return false;
-    const dpr = Math.max(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     const targetW = Math.round(window.innerWidth * dpr);
     const targetH = Math.round(window.innerHeight * dpr);
 
     if (canvas.width !== targetW || canvas.height !== targetH) {
       canvas.width = targetW;
       canvas.height = targetH;
-      const ctx = canvas.getContext("2d");
+      const ctx = canvas.getContext("2d", { alpha: false });
       if (ctx) {
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
@@ -105,19 +111,21 @@ export default function HeroSection({
     return false;
   }, []);
 
-  // ─── 2. Draw Frame to Canvas with High Quality Filtering ────────────
-  const drawFrame = useCallback((frameIndex: number) => {
+  // ─── 2. Draw Frame to Canvas (Crisp Single Frame, Zero Ghosting) ───
+  const drawFrame = useCallback((frameIndex: number, force = false) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) return;
 
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
+    const idx = Math.max(0, Math.min(TOTAL_FRAMES - 1, Math.round(frameIndex)));
+    if (!force && idx === lastDrawnFrameRef.current) return;
 
-    const targetImg = imagesRef.current[frameIndex];
+    const targetImg = imagesRef.current[idx];
     if (targetImg && targetImg.complete && targetImg.naturalWidth > 0) {
-      lastDrawnFrameRef.current = frameIndex;
+      lastDrawnFrameRef.current = idx;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
       ctx.drawImage(targetImg, 0, 0, canvas.width, canvas.height);
     }
   }, []);
@@ -241,31 +249,33 @@ export default function HeroSection({
     }
   }, [isAboutActive, drawFrame]);
 
-    // ─── 3. Preload and pre-decode all 80 hero PNG frames ─────────────
+    // ─── 3. Staged trickle-preload of 119 hero frames (zero Splash/cursor stutter) ───
     useEffect(() => {
+      if (!canPreload) return;
       resizeCanvas();
       let loaded = 0;
+      let cancelled = false;
       const images: HTMLImageElement[] = new Array(TOTAL_FRAMES);
+      imagesRef.current = images;
 
-      for (let i = 1; i <= TOTAL_FRAMES; i++) {
+      const loadFrame = (i: number) => {
+        if (cancelled) return;
         const img = new window.Image();
         img.src = `${FRAME_PATH}${String(i).padStart(3, "0")}${FRAME_EXT}`;
-
         if ("decode" in img) {
-          img.decode().catch(() => { });
+          img.decode().catch(() => {});
         }
 
         const handleLoad = () => {
           loaded++;
           loadedCountRef.current = loaded;
-          if (
-            loaded >= 5 &&
-            !hasDrawnInitialRef.current &&
-            lastDrawnFrameRef.current === 0 &&
-            targetFrameRef.current === 0
-          ) {
-            hasDrawnInitialRef.current = true;
-            drawFrame(0);
+          if (lastDrawnFrameRef.current < 0) {
+            const targetIdx = Math.max(0, Math.min(TOTAL_FRAMES - 1, Math.round(smoothFrameRef.current)));
+            const targetImg = images[targetIdx];
+            if (targetImg && targetImg.complete && targetImg.naturalWidth > 0) {
+              hasDrawnInitialRef.current = true;
+              drawFrame(targetIdx, true);
+            }
           }
           if (loaded === TOTAL_FRAMES) {
             imagesLoadedRef.current = true;
@@ -274,32 +284,63 @@ export default function HeroSection({
         img.onload = handleLoad;
         img.onerror = handleLoad;
         images[i - 1] = img;
+      };
+
+      // Load first 12 frames immediately so Hero's entry is instant
+      for (let i = 1; i <= Math.min(12, TOTAL_FRAMES); i++) {
+        loadFrame(i);
       }
 
-      imagesRef.current = images;
+      // Trickle remaining frames in small batches so Splash playback & cursor never stutter
+      let nextIdx = 13;
+      const trickleTimer = setInterval(() => {
+        if (cancelled || nextIdx > TOTAL_FRAMES) {
+          clearInterval(trickleTimer);
+          return;
+        }
+        const end = Math.min(TOTAL_FRAMES, nextIdx + 5);
+        for (let i = nextIdx; i <= end; i++) {
+          loadFrame(i);
+        }
+        nextIdx = end + 1;
+      }, 90);
 
-    const handleWindowResize = () => {
-      resizeCanvas();
-      drawFrame(lastDrawnFrameRef.current || 0);
-    };
-    window.addEventListener("resize", handleWindowResize);
-    return () => window.removeEventListener("resize", handleWindowResize);
-  }, [drawFrame, resizeCanvas]);
+      const handleWindowResize = () => {
+        resizeCanvas();
+        drawFrame(lastDrawnFrameRef.current >= 0 ? lastDrawnFrameRef.current : 0, true);
+      };
+      window.addEventListener("resize", handleWindowResize);
+      return () => {
+        cancelled = true;
+        clearInterval(trickleTimer);
+        window.removeEventListener("resize", handleWindowResize);
+      };
+    }, [canPreload, drawFrame, resizeCanvas]);
 
-  // ─── 4. Unified Lenis Smooth Scroll Lifecycle (100% Scroll-Based) ───
+  // ─── 4. Unified Lenis Smooth Scroll Lifecycle (100% Lenis-Driven) ───
   useEffect(() => {
     if (!isActive || isAboutActive) {
-      if (scrubAnimIdRef.current) {
-        cancelAnimationFrame(scrubAnimIdRef.current);
-        scrubAnimIdRef.current = null;
+      if (localLenisRef.current) {
+        localLenisRef.current.destroy();
+        localLenisRef.current = null;
       }
       wasAboutActiveRef.current = isAboutActive;
       return;
     }
 
-    if (resizeCanvas()) {
-      drawFrame(lastDrawnFrameRef.current || 0);
-    }
+    const wrapper = scrollWrapperRef.current;
+    const content = scrollContentRef.current;
+    const containerEl = containerRef.current;
+    if (!wrapper || !content || !containerEl) return;
+
+    resizeCanvas();
+    drawFrame(smoothFrameRef.current || 0, true);
+
+    const syncContentHeight = () => {
+      const baseH = wrapper.clientHeight || window.innerHeight || 720;
+      content.style.height = `${Math.ceil(baseH + HERO_RUNWAY_PX)}px`;
+    };
+    syncContentHeight();
 
     // Returning from About: anchor seamlessly at final hero frame (only if not already scrubbed earlier)
     if (wasAboutActiveRef.current) {
@@ -318,67 +359,66 @@ export default function HeroSection({
     }
     wasAboutActiveRef.current = false;
 
-    // Continuous 60fps/120fps display refresh lerp loop
-    const raf = () => {
-      if (!isAboutActiveRef.current && !isFastForwardingRef.current) {
-        const diff = targetFrameRef.current - smoothFrameRef.current;
-        if (Math.abs(diff) > 0.015) {
-          smoothFrameRef.current += diff * 0.18;
-        } else {
-          smoothFrameRef.current = targetFrameRef.current;
-        }
+    const heroLenis = new Lenis({
+      wrapper,
+      content,
+      eventsTarget: containerEl,
+      lerp: 0.085,
+      orientation: "vertical",
+      gestureOrientation: "vertical",
+      smoothWheel: true,
+      wheelMultiplier: 0.9,
+      touchMultiplier: 1.0,
+      syncTouch: true,
+      overscroll: false,
+      autoRaf: true,
+    });
+    localLenisRef.current = heroLenis;
 
-        const frameToDraw = Math.min(
-          TOTAL_FRAMES - 1,
-          Math.max(0, Math.round(smoothFrameRef.current))
-        );
+    const initialScroll = (smoothFrameRef.current / (TOTAL_FRAMES - 1)) * HERO_RUNWAY_PX;
+    if (initialScroll > 0) {
+      heroLenis.scrollTo(initialScroll, { immediate: true, force: true });
+    }
 
-        if (frameToDraw !== lastDrawnFrameRef.current) {
-          drawFrame(frameToDraw);
-          const p = Math.min(1, Math.max(0, frameToDraw / (TOTAL_FRAMES - 1)));
-          onProgressChangeRef.current?.(p);
-        }
-      }
+    const resizeObserver = new ResizeObserver(() => {
+      syncContentHeight();
+      heroLenis.resize();
+    });
+    resizeObserver.observe(wrapper);
 
-      scrubAnimIdRef.current = requestAnimationFrame(raf);
-    };
-
-    scrubAnimIdRef.current = requestAnimationFrame(raf);
-
-    const processDelta = (deltaY: number) => {
-      if (!isActive || isAboutActiveRef.current || isFastForwardingRef.current) return;
+    const unsubscribeScroll = heroLenis.on("scroll", ({ scroll }) => {
+      if (isAboutActiveRef.current || isFastForwardingRef.current) return;
       lastWheelScrubTimeRef.current = Date.now();
 
-      // Upward scroll (scrub backward)
-      if (deltaY < -3) {
-        hasCompletedRef.current = false;
-        const deltaFrames = Math.max(0.6, Math.min(8, Math.abs(deltaY) * 0.08));
-        targetFrameRef.current = Math.max(0, targetFrameRef.current - deltaFrames);
-      } else if (deltaY > 3) {
-        // Downward scroll (scrub forward)
-        if (
-          Date.now() > transitionCooldownRef.current &&
-          targetFrameRef.current >= TOTAL_FRAMES - 1 &&
-          deltaY > 5
-        ) {
-          onScrollPastHeroRef.current?.();
-        } else {
-          const deltaFrames = Math.max(0.6, Math.min(8, Math.abs(deltaY) * 0.08));
-          targetFrameRef.current = Math.min(TOTAL_FRAMES - 1, targetFrameRef.current + deltaFrames);
+      const progress = Math.max(0, Math.min(1, scroll / HERO_RUNWAY_PX));
+      const frameIdx = Math.round(progress * (TOTAL_FRAMES - 1));
 
-          if (targetFrameRef.current >= TOTAL_FRAMES - 1) {
-            hasCompletedRef.current = true;
-            onHeroCompleteRef.current?.();
-          }
-        }
+      targetFrameRef.current = frameIdx;
+      smoothFrameRef.current = frameIdx;
+
+      if (frameIdx !== lastDrawnFrameRef.current) {
+        drawFrame(frameIdx);
+        onProgressChangeRef.current?.(progress);
       }
-    };
 
-    // Direct wheel listener (matches AboutTransition): captures every wheel tick once cleanly
-    const handleWindowWheel = (e: WheelEvent) => {
-      processDelta(e.deltaY);
-    };
-    window.addEventListener("wheel", handleWindowWheel, { passive: true });
+      if (progress >= 0.995 && !hasCompletedRef.current) {
+        hasCompletedRef.current = true;
+        onHeroCompleteRef.current?.();
+      } else if (progress < 0.98) {
+        hasCompletedRef.current = false;
+      }
+    });
+
+    const unsubscribeVirtual = heroLenis.on("virtual-scroll", ({ deltaY }) => {
+      if (!isActive || isAboutActiveRef.current || isFastForwardingRef.current) return;
+      if (
+        deltaY > 2 &&
+        Date.now() > transitionCooldownRef.current &&
+        heroLenis.scroll >= HERO_RUNWAY_PX - 3
+      ) {
+        onScrollPastHeroRef.current?.();
+      }
+    });
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isActive || isAboutActiveRef.current || isFastForwardingRef.current) return;
@@ -386,32 +426,38 @@ export default function HeroSection({
         e.preventDefault();
         if (
           Date.now() > transitionCooldownRef.current &&
-          targetFrameRef.current >= TOTAL_FRAMES - 1
+          heroLenis.scroll >= HERO_RUNWAY_PX - 3
         ) {
           onScrollPastHeroRef.current?.();
         } else {
-          targetFrameRef.current = Math.min(TOTAL_FRAMES - 1, targetFrameRef.current + 6);
-          if (targetFrameRef.current >= TOTAL_FRAMES - 1) {
-            hasCompletedRef.current = true;
-            onHeroCompleteRef.current?.();
-          }
+          heroLenis.scrollTo(Math.min(HERO_RUNWAY_PX, heroLenis.scroll + 220), {
+            duration: 0.7,
+          });
         }
       } else if (e.key === "ArrowUp" || e.key === "PageUp") {
         e.preventDefault();
-        targetFrameRef.current = Math.max(0, targetFrameRef.current - 6);
+        heroLenis.scrollTo(Math.max(0, heroLenis.scroll - 220), {
+          duration: 0.7,
+        });
       }
     };
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      window.removeEventListener("wheel", handleWindowWheel);
       window.removeEventListener("keydown", handleKeyDown);
-      if (scrubAnimIdRef.current) cancelAnimationFrame(scrubAnimIdRef.current);
+      unsubscribeScroll();
+      unsubscribeVirtual();
+      resizeObserver.disconnect();
+      heroLenis.destroy();
+      if (localLenisRef.current === heroLenis) {
+        localLenisRef.current = null;
+      }
     };
   }, [isActive, isAboutActive, drawFrame, resizeCanvas]);
 
   return (
     <div
+      ref={containerRef}
       className={`fixed inset-0 w-full h-full select-none bg-black transition-opacity duration-700 ease-in-out ${isActive
           ? `opacity-100 ${isAboutActive ? "pointer-events-none z-30" : "pointer-events-auto z-40"}`
           : "opacity-0 pointer-events-none z-0"
@@ -419,12 +465,19 @@ export default function HeroSection({
     >
       <canvas
         ref={canvasRef}
-        className="w-full h-full object-fill cursor-default block select-none render-high-quality"
+        className="w-full h-full object-fill cursor-default block select-none pointer-events-none render-high-quality"
       />
       <div
         className="absolute inset-0 pointer-events-none video-corner-overlay"
         aria-hidden="true"
       />
+      <div
+        ref={scrollWrapperRef}
+        className="absolute inset-0 z-10 overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:hidden"
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+      >
+        <div ref={scrollContentRef} className="w-full pointer-events-none" />
+      </div>
     </div>
   );
 }

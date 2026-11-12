@@ -6,6 +6,7 @@ import HeroSection, { FastForwardHandoff } from "@/components/HeroSection";
 import MetaBalls from "@/components/MetaBalls";
 import AboutTransition from "@/components/AboutTransition";
 import PortfolioSection from "@/components/PortfolioSection";
+import { MAX_PROGRESS as EXPERIENCE_SECTION_MAX_PROGRESS } from "@/components/ExperienceSection";
 import SideScrollBar from "@/components/SideScrollBar";
 import RocketBoostSkip from "@/components/RocketBoostSkip";
 import LampToggle from "@/components/LampToggle";
@@ -17,6 +18,8 @@ export default function Home() {
   const [isPortfolioActive, setIsPortfolioActive] = useState(false);
   const [portfolioScrollProgress, setPortfolioScrollProgress] = useState(0);
   const [targetPortfolioProgress, setTargetPortfolioProgress] = useState<number | null>(null);
+  const [experienceProgress, setExperienceProgress] = useState(0);
+  const [targetExperienceProgress, setTargetExperienceProgress] = useState<number | null>(null);
   const [splashProgress, setSplashProgress] = useState(0);
   const [heroProgress, setHeroProgress] = useState(0);
   const [transitionProgress, setTransitionProgress] = useState(0);
@@ -30,18 +33,24 @@ export default function Home() {
   const [fastForwardHandoff, setFastForwardHandoff] = useState<FastForwardHandoff | null>(null);
   const [isSplashReady, setIsSplashReady] = useState(false);
   const [isProjectLiveExpanded, setIsProjectLiveExpanded] = useState(false);
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme, setTheme] = useState<"dark" | "light">("light");
   const hasRestoredRef = useRef(false);
 
   const lenis = useLenis();
 
-  // Initialize theme from DOM attribute or storage on mount
+  // Initialize theme from DOM attribute or storage on mount (default: light)
   useEffect(() => {
     const current =
-      (document.documentElement.getAttribute("data-theme") as "dark" | "light") ||
       (localStorage.getItem("portfolio-theme") as "dark" | "light") ||
-      "dark";
+      (document.documentElement.getAttribute("data-theme") as "dark" | "light") ||
+      "light";
     setTheme(current);
+    document.documentElement.setAttribute("data-theme", current);
+    if (current === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
   }, []);
 
   // Intercept hard refresh shortcuts (Ctrl+Shift+R, Ctrl+F5, Shift+F5, F5/Fn+F5 with Shift)
@@ -313,6 +322,11 @@ export default function Home() {
     setTargetPortfolioProgress(null);
   }, []);
 
+  const handleExperienceProgressChange = useCallback((prog: number) => {
+    setExperienceProgress(prog);
+    setTargetExperienceProgress(null);
+  }, []);
+
   // Splash progress handler
   const handleSplashProgressChange = useCallback((progress: number) => {
     setSplashProgress(progress);
@@ -359,56 +373,39 @@ export default function Home() {
   }, [isAboutActive, heroProgress, transitionProgress]);
 
   // Calculate overall scrollytelling progress for the side scrollbar (0 to 1):
-  // - On splash screen: tracks splash sequence from 0 to 1
-  // - Once splash screen completes:
-  //   Hero: 0.0 -> 0.40
-  //   About Transition: 0.40 -> 0.75
-  //   Portfolio (PC -> MY CREATIONS.EXE -> WHAT WE SHIP): 0.75 -> 1.00
-  const overallProgress = !isLastFrame
-    ? splashProgress
-    : isAboutActive
-      ? isPortfolioActive
-        ? 0.75 + (Math.min(2, portfolioScrollProgress) / 2) * 0.25
-        : 0.40 + transitionProgress * 0.35
-      : heroProgress * 0.40;
+  // - Hidden on Splash, Hero, and About Transition; active only from About Me onward
+  //   Portfolio (PC -> MY CREATIONS.EXE): 0.00 -> 0.20
+  //   WhatWeShip (Experience -> Leadership -> Achievements -> Skills -> Certifications -> Education): 0.20 -> 1.00
+  const overallProgress = !(isLastFrame && isAboutActive && isPortfolioActive)
+    ? 0
+    : portfolioScrollProgress >= 2
+      ? 0.20 + (Math.min(EXPERIENCE_SECTION_MAX_PROGRESS, Math.max(0, experienceProgress)) / EXPERIENCE_SECTION_MAX_PROGRESS) * 0.80
+      : (Math.min(2, Math.max(0, portfolioScrollProgress)) / 2) * 0.20;
 
-  // Smoothly scrub via the edge scrollbar across all sections:
+  // Smoothly scrub via the edge scrollbar across Portfolio & WhatWeShip (never back above About Me):
   const handleScrollToProgress = useCallback((targetProgress: number) => {
-    if (!isLastFrame) {
-      // While on splash screen, scrub splash screen directly (0 to 1)
-      setTargetSplashProgress(targetProgress);
+    if (!isLastFrame || !isAboutActive || !isPortfolioActive) return;
+
+    const clamped = Math.min(1, Math.max(0, targetProgress));
+    if (clamped < 0.20) {
+      // Portfolio Section (PC -> MY CREATIONS.EXE)
+      const pp = Math.min(1.99, Math.max(0, (clamped / 0.20) * 2));
+      setPortfolioScrollProgress(pp);
+      setTargetPortfolioProgress(pp);
+      setExperienceProgress(0);
+      setTargetExperienceProgress(0);
     } else {
-      if (targetProgress < 0.40) {
-        // Hero Section
-        const hp = Math.min(1, targetProgress / 0.40);
-        setHeroProgress(hp);
-        setTargetHeroProgress(hp);
-        setTargetAboutProgress(null);
-        setTargetPortfolioProgress(null);
-        setIsAboutActive(false);
-        setIsPortfolioActive(false);
-      } else if (targetProgress < 0.75) {
-        // About Transition
-        const ap = Math.min(1, (targetProgress - 0.40) / 0.35);
-        setTransitionProgress(ap);
-        setTargetAboutProgress(ap);
-        setTargetHeroProgress(null);
-        setTargetPortfolioProgress(null);
-        setIsAboutActive(true);
-        setIsPortfolioActive(false);
-      } else {
-        // Portfolio Section (PC -> MY CREATIONS.EXE -> WHAT WE SHIP continuous scroll)
-        const pp = Math.min(2, Math.max(0, ((targetProgress - 0.75) / 0.25) * 2));
-        setTransitionProgress(1);
-        setTargetAboutProgress(1);
-        setTargetHeroProgress(null);
-        setIsAboutActive(true);
-        setIsPortfolioActive(true);
-        setPortfolioScrollProgress(pp);
-        setTargetPortfolioProgress(pp);
-      }
+      // ExperienceSection (Experience -> Education)
+      const wp = Math.min(
+        EXPERIENCE_SECTION_MAX_PROGRESS,
+        Math.max(0, ((clamped - 0.20) / 0.80) * EXPERIENCE_SECTION_MAX_PROGRESS)
+      );
+      setPortfolioScrollProgress(2);
+      setTargetPortfolioProgress(2);
+      setExperienceProgress(wp);
+      setTargetExperienceProgress(wp);
     }
-  }, [isLastFrame]);
+  }, [isLastFrame, isAboutActive, isPortfolioActive]);
 
   // Step-by-step skip handler with Rocket Boost speed streaks:
   // Splash Screen -> Hero -> Transition (Retro PC About section)
@@ -456,6 +453,7 @@ export default function Home() {
       <HeroSection
         lenis={lenis}
         isActive={isLastFrame}
+        canPreload={isSplashReady}
         isAboutActive={isAboutActive}
         onHeroComplete={handleHeroComplete}
         onScrollPastHero={handleScrollPastHero}
@@ -519,7 +517,7 @@ export default function Home() {
               spacing={0.56}
               paused={!isLastFrame || transitionProgress > 70 / 105}
               collapseProgress={isAboutActive ? Math.min(1, transitionProgress / (70 / 105)) : 0}
-              dpr={typeof window !== "undefined" ? Math.max(window.devicePixelRatio || 1, 2) : 2}
+              dpr={typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 1.5) : 1}
             />
           </div>
 
@@ -545,7 +543,7 @@ export default function Home() {
               spacing={0.58}
               paused={!isLastFrame || transitionProgress > 70 / 105}
               collapseProgress={isAboutActive ? Math.min(1, transitionProgress / (70 / 105)) : 0}
-              dpr={typeof window !== "undefined" ? Math.max(window.devicePixelRatio || 1, 2) : 2}
+              dpr={typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 1.5) : 1}
             />
           </div>
         </div>
@@ -555,6 +553,7 @@ export default function Home() {
       <AboutTransition
         lenis={lenis}
         isActive={isAboutActive}
+        canPreload={isLastFrame}
         isPortfolioActive={isAboutActive && isPortfolioActive}
         portfolioScrollPos={portfolioScrollProgress}
         onProgressChange={handleProgressChange}
@@ -565,29 +564,34 @@ export default function Home() {
         handoff={fastForwardHandoff}
       />
 
-      {/* Portfolio section — continuous scrolling PC (Who's behind the screen) & MY CREATIONS.EXE */}
-      <PortfolioSection
-        isActive={isAboutActive && isPortfolioActive}
-        externalScrollProgress={targetPortfolioProgress}
-        onPortfolioProgressChange={handlePortfolioProgressChange}
-        onScrollBackToTransition={handleScrollBackFromPortfolio}
-        onScrollToHeroStart={handleScrollToHeroStart}
-        onExpandedStateChange={setIsProjectLiveExpanded}
-      />
-
-      {/* Interactive Pull-String Lamp Theme Toggle — visible once splash screen completes */}
+      {/* Portfolio section — mounted once Splash finishes so initial load & Splash stay lightweight */}
       {isLastFrame && (
+        <PortfolioSection
+          isActive={isAboutActive && isPortfolioActive}
+          externalScrollProgress={targetPortfolioProgress}
+          onPortfolioProgressChange={handlePortfolioProgressChange}
+          externalExperienceProgress={targetExperienceProgress}
+          onExperienceProgressChange={handleExperienceProgressChange}
+          onScrollBackToTransition={handleScrollBackFromPortfolio}
+          onScrollToHeroStart={handleScrollToHeroStart}
+          onExpandedStateChange={setIsProjectLiveExpanded}
+        />
+      )}
+
+      {/* Interactive Pull-String Lamp Theme Toggle — visible once About Me / Portfolio section is active */}
+      {isLastFrame && isAboutActive && isPortfolioActive && (
         <LampToggle
+          defaultTheme="light"
           onThemeChange={setTheme}
           className={`right-12 sm:right-20 md:right-24 transition-opacity duration-500 ${isProjectLiveExpanded ? "opacity-0 pointer-events-none" : "opacity-100"
             }`}
         />
       )}
 
-      {/* Beautiful Native-Style Edge Scrollbar — active across entire journey, smoothly hidden during live site expansion */}
+      {/* Beautiful Native-Style Edge Scrollbar — visible only from About Me onward and hidden during live site expansion */}
       <SideScrollBar
         progress={overallProgress}
-        isVisible={isSplashReady && !isProjectLiveExpanded}
+        isVisible={isLastFrame && isAboutActive && isPortfolioActive && !isProjectLiveExpanded}
         onScrollToProgress={handleScrollToProgress}
       />
     </>

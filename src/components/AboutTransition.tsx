@@ -5,6 +5,7 @@ import Lenis from "lenis";
 import { lenisSmoothRocketEase } from "@/lib/lenis";
 
 const TOTAL_FRAMES = 106;
+const TRANSITION_RUNWAY_PX = 2000;
 const FRAME_PATH = "/assets/transition/ezgif-frame-";
 const FRAME_EXT = ".webp";
 
@@ -16,6 +17,7 @@ export interface FastForwardHandoff {
 
 interface AboutTransitionProps {
   isActive: boolean;
+  canPreload?: boolean;
   isPortfolioActive?: boolean;
   portfolioScrollPos?: number;
   onProgressChange?: (progress: number) => void;
@@ -29,6 +31,7 @@ interface AboutTransitionProps {
 
 export default function AboutTransition({
   isActive,
+  canPreload = true,
   isPortfolioActive,
   portfolioScrollPos = 0,
   onProgressChange,
@@ -40,6 +43,10 @@ export default function AboutTransition({
   handoff,
 }: AboutTransitionProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scrollWrapperRef = useRef<HTMLDivElement>(null);
+  const scrollContentRef = useRef<HTMLDivElement>(null);
+  const localLenisRef = useRef<Lenis | null>(null);
   const imagesRef = useRef<HTMLImageElement[]>([]);
 
   const initialFrame =
@@ -50,7 +57,7 @@ export default function AboutTransition({
       : 0;
   const targetFrameRef = useRef(initialFrame);
   const smoothFrameRef = useRef(initialFrame);
-  const lastDrawnFrameRef = useRef(initialFrame);
+  const lastDrawnFrameRef = useRef(-1);
   const hasDrawnInitialRef = useRef(false);
   const animIdRef = useRef<number | null>(null);
   const isScrolledBackRef = useRef(false);
@@ -115,11 +122,11 @@ export default function AboutTransition({
 
   const imagesLoadedRef = useRef(false);
 
-  // ─── 1. Resize Canvas with Native High-DPI Retina Buffer ─────────
+  // ─── 1. Resize Canvas with Optimal Crisp Buffer (fast 60/120fps) ──
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const dpr = Math.max(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     const targetW = Math.round(window.innerWidth * dpr);
     const targetH = Math.round(window.innerHeight * dpr);
 
@@ -129,19 +136,21 @@ export default function AboutTransition({
     }
   }, []);
 
-  // ─── 2. Draw Frame to Canvas with High Quality Filtering ────────────
-  const drawFrame = useCallback((frameIndex: number) => {
+  // ─── 2. Draw Frame to Canvas (Crisp Single Frame, Zero Ghosting) ───
+  const drawFrame = useCallback((frameIndex: number, force = false) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) return;
 
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
+    const idx = Math.max(0, Math.min(TOTAL_FRAMES - 1, Math.round(frameIndex)));
+    if (!force && idx === lastDrawnFrameRef.current) return;
 
-    const targetImg = imagesRef.current[frameIndex];
+    const targetImg = imagesRef.current[idx];
     if (targetImg && targetImg.complete && targetImg.naturalWidth > 0) {
-      lastDrawnFrameRef.current = frameIndex;
+      lastDrawnFrameRef.current = idx;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
       ctx.drawImage(targetImg, 0, 0, canvas.width, canvas.height);
     }
   }, []);
@@ -167,6 +176,12 @@ export default function AboutTransition({
       smoothFrameRef.current = frame;
       lastDrawnFrameRef.current = frame;
       drawFrame(frame);
+      if (localLenisRef.current) {
+        localLenisRef.current.scrollTo(targetProgress * TRANSITION_RUNWAY_PX, {
+          immediate: true,
+          force: true,
+        });
+      }
       scrollBackCooldownRef.current = Date.now() + 450;
       onProgressChangeRef.current?.(targetProgress);
       wakeAnimationRef.current?.();
@@ -258,25 +273,32 @@ export default function AboutTransition({
     };
   }, [fastForwardTrigger, isActive, drawFrame]);
 
-  // ─── 4. Preload and pre-decode all 106 transition PNG frames ───────
+  // ─── 4. Staged trickle-preload of 106 transition frames (zero Hero/cursor stutter) ───
   useEffect(() => {
+    if (!canPreload) return;
     resizeCanvas();
     let loaded = 0;
+    let cancelled = false;
     const images: HTMLImageElement[] = new Array(TOTAL_FRAMES);
+    imagesRef.current = images;
 
-    for (let i = 1; i <= TOTAL_FRAMES; i++) {
+    const loadFrame = (i: number) => {
+      if (cancelled) return;
       const img = new window.Image();
       img.src = `${FRAME_PATH}${String(i).padStart(3, "0")}${FRAME_EXT}`;
-
       if ("decode" in img) {
         img.decode().catch(() => {});
       }
 
       const handleLoad = () => {
         loaded++;
-        if (loaded >= 5 && !hasDrawnInitialRef.current && lastDrawnFrameRef.current === 0) {
-          hasDrawnInitialRef.current = true;
-          drawFrame(0);
+        if (lastDrawnFrameRef.current < 0) {
+          const targetIdx = Math.max(0, Math.min(TOTAL_FRAMES - 1, Math.round(smoothFrameRef.current)));
+          const targetImg = images[targetIdx];
+          if (targetImg && targetImg.complete && targetImg.naturalWidth > 0) {
+            hasDrawnInitialRef.current = true;
+            drawFrame(targetIdx, true);
+          }
         }
         if (loaded === TOTAL_FRAMES) {
           imagesLoadedRef.current = true;
@@ -285,32 +307,64 @@ export default function AboutTransition({
       img.onload = handleLoad;
       img.onerror = handleLoad;
       images[i - 1] = img;
+    };
+
+    // Load first 12 frames immediately
+    for (let i = 1; i <= Math.min(12, TOTAL_FRAMES); i++) {
+      loadFrame(i);
     }
 
-    imagesRef.current = images;
+    // Trickle remaining frames in small batches so Hero scrolling & cursor stay smooth
+    let nextIdx = 13;
+    const trickleTimer = setInterval(() => {
+      if (cancelled || nextIdx > TOTAL_FRAMES) {
+        clearInterval(trickleTimer);
+        return;
+      }
+      const end = Math.min(TOTAL_FRAMES, nextIdx + 5);
+      for (let i = nextIdx; i <= end; i++) {
+        loadFrame(i);
+      }
+      nextIdx = end + 1;
+    }, 80);
 
     const handleWindowResize = () => {
       resizeCanvas();
-      drawFrame(lastDrawnFrameRef.current || 0);
+      drawFrame(lastDrawnFrameRef.current >= 0 ? lastDrawnFrameRef.current : 0, true);
     };
     window.addEventListener("resize", handleWindowResize);
-    return () => window.removeEventListener("resize", handleWindowResize);
-  }, [drawFrame, resizeCanvas]);
+    return () => {
+      cancelled = true;
+      clearInterval(trickleTimer);
+      window.removeEventListener("resize", handleWindowResize);
+    };
+  }, [canPreload, drawFrame, resizeCanvas]);
 
-  // ─── 5. Unified Lenis Virtual Scroll Lifecycle ────────────────────
+  // ─── 5. Unified Lenis Smooth Scroll Lifecycle (100% Lenis-Driven) ───
   useEffect(() => {
-    if (!isActive) {
-      if (animIdRef.current) {
-        cancelAnimationFrame(animIdRef.current);
-        animIdRef.current = null;
+    if (!isActive || isPortfolioActive) {
+      if (localLenisRef.current) {
+        localLenisRef.current.destroy();
+        localLenisRef.current = null;
       }
-      wakeAnimationRef.current = null;
       return;
     }
 
+    const wrapper = scrollWrapperRef.current;
+    const content = scrollContentRef.current;
+    const containerEl = containerRef.current;
+    if (!wrapper || !content || !containerEl) return;
+
     resizeCanvas();
+    drawFrame(smoothFrameRef.current || 0, true);
     isScrolledBackRef.current = false;
     transitionCooldownRef.current = Date.now() + 450;
+
+    const syncContentHeight = () => {
+      const baseH = wrapper.clientHeight || window.innerHeight || 720;
+      content.style.height = `${Math.ceil(baseH + TRANSITION_RUNWAY_PX)}px`;
+    };
+    syncContentHeight();
 
     // Reset to start on entering About transition (only on initial mount when entering via normal scroll, not in fast forward and not when dragging via scrollbar)
     if (
@@ -329,145 +383,114 @@ export default function AboutTransition({
       onProgressChangeRef.current?.(1 / (TOTAL_FRAMES - 1));
     }
 
-    // Continuous liquid-smooth lerp loop (60fps/120fps)
-    const raf = () => {
-      if (!isFastForwardingRef.current) {
-        const diff = targetFrameRef.current - smoothFrameRef.current;
-        if (Math.abs(diff) > 0.015) {
-          smoothFrameRef.current += diff * 0.24;
-        } else {
-          smoothFrameRef.current = targetFrameRef.current;
-        }
+    const transLenis = new Lenis({
+      wrapper,
+      content,
+      eventsTarget: containerEl,
+      lerp: 0.085,
+      orientation: "vertical",
+      gestureOrientation: "vertical",
+      smoothWheel: true,
+      wheelMultiplier: 0.9,
+      touchMultiplier: 1.0,
+      syncTouch: true,
+      overscroll: false,
+      autoRaf: true,
+    });
+    localLenisRef.current = transLenis;
 
-        const frameToDraw = Math.min(
-          TOTAL_FRAMES - 1,
-          Math.max(0, Math.round(smoothFrameRef.current))
-        );
+    const initialScroll = (smoothFrameRef.current / (TOTAL_FRAMES - 1)) * TRANSITION_RUNWAY_PX;
+    if (initialScroll > 0) {
+      transLenis.scrollTo(initialScroll, { immediate: true, force: true });
+    }
 
-        if (frameToDraw !== lastDrawnFrameRef.current) {
-          drawFrame(frameToDraw);
-          const progress = Math.min(
-            1,
-            Math.max(0, frameToDraw / (TOTAL_FRAMES - 1))
-          );
-          onProgressChangeRef.current?.(progress);
-        }
+    const resizeObserver = new ResizeObserver(() => {
+      syncContentHeight();
+      transLenis.resize();
+    });
+    resizeObserver.observe(wrapper);
+
+    const unsubscribeScroll = transLenis.on("scroll", ({ scroll }) => {
+      if (isPortfolioActiveRef.current || isFastForwardingRef.current) return;
+
+      const progress = Math.max(0, Math.min(1, scroll / TRANSITION_RUNWAY_PX));
+      const frameIdx = Math.round(progress * (TOTAL_FRAMES - 1));
+
+      targetFrameRef.current = frameIdx;
+      smoothFrameRef.current = frameIdx;
+
+      if (frameIdx !== lastDrawnFrameRef.current) {
+        drawFrame(frameIdx);
+        onProgressChangeRef.current?.(progress);
       }
 
-      // If at rest at the final frame in Portfolio section, sleep RAF loop to free 100% GPU/CPU
       if (
-        !isLandingRef.current &&
-        isPortfolioActiveRef.current &&
-        smoothFrameRef.current >= TOTAL_FRAMES - 1.05 &&
-        Math.abs(targetFrameRef.current - smoothFrameRef.current) < 0.05
+        !isPortfolioActiveRef.current &&
+        Date.now() > scrollBackCooldownRef.current &&
+        progress >= 0.996
       ) {
-        animIdRef.current = null;
-        return;
-      }
-
-      animIdRef.current = requestAnimationFrame(raf);
-    };
-
-    animIdRef.current = requestAnimationFrame(raf);
-
-    const wakeAnimation = () => {
-      if (!animIdRef.current) {
-        animIdRef.current = requestAnimationFrame(raf);
-      }
-    };
-    wakeAnimationRef.current = wakeAnimation;
-
-    // Unified scroll processor for wheel, virtual-scroll, keys, and touch
-    const processDelta = (deltaY: number) => {
-      if (!isActive || isFastForwardingRef.current) return;
-
-      // When Portfolio section is active, PortfolioSection manages its own scroll state
-      if (isPortfolioActiveRef.current) {
         targetFrameRef.current = TOTAL_FRAMES - 1;
         smoothFrameRef.current = TOTAL_FRAMES - 1;
-        return;
+        drawFrame(TOTAL_FRAMES - 1);
+        onProgressChangeRef.current?.(1);
+        onLandingCompleteRef.current?.();
       }
+    });
 
-      wakeAnimation();
+    const unsubscribeVirtual = transLenis.on("virtual-scroll", ({ deltaY }) => {
+      if (!isActive || isPortfolioActiveRef.current || isFastForwardingRef.current) return;
+      if (
+        deltaY < -2 &&
+        Date.now() > transitionCooldownRef.current &&
+        transLenis.scroll <= 3 &&
+        !isScrolledBackRef.current
+      ) {
+        isScrolledBackRef.current = true;
+        onScrollBackToHeroRef.current?.();
+      }
+    });
 
-      if (deltaY > 0) {
-        // Scrolling DOWN / FORWARD towards About / PC
-        isLandingRef.current = false;
-        isScrolledBackRef.current = false;
-
-        const deltaFrames = Math.max(0.6, Math.min(8, Math.abs(deltaY) * 0.08));
-        const nextTarget = Math.min(TOTAL_FRAMES - 1, targetFrameRef.current + deltaFrames);
-        targetFrameRef.current = nextTarget;
-
-        // Only complete landing when user actively drives forward to the final frame (105)
-        // and scroll-back cooldown has passed:
-        if (Date.now() > scrollBackCooldownRef.current && nextTarget >= TOTAL_FRAMES - 1) {
-          targetFrameRef.current = TOTAL_FRAMES - 1;
-          smoothFrameRef.current = TOTAL_FRAMES - 1;
-          drawFrame(TOTAL_FRAMES - 1);
-          onProgressChangeRef.current?.(1);
-          onLandingCompleteRef.current?.();
-        }
-      } else if (deltaY < 0) {
-        // Scrolling UP / BACKWARD towards Hero
-        isLandingRef.current = false;
-
-        if (targetFrameRef.current > TOTAL_FRAMES - 1) {
-          targetFrameRef.current = TOTAL_FRAMES - 1;
-        }
-
-        const deltaFrames = Math.max(0.6, Math.min(8, Math.abs(deltaY) * 0.08));
-        targetFrameRef.current = Math.max(0, targetFrameRef.current - deltaFrames);
-
-        // If scrubbed to beginning and continuing upward, return to Hero
+    // Keyboard navigation (ArrowDown, ArrowUp, PageDown, PageUp, Space)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isActive || isPortfolioActiveRef.current || isFastForwardingRef.current) return;
+      if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ") {
+        e.preventDefault();
+        transLenis.scrollTo(Math.min(TRANSITION_RUNWAY_PX, transLenis.scroll + 220), {
+          duration: 0.7,
+        });
+      } else if (e.key === "ArrowUp" || e.key === "PageUp") {
+        e.preventDefault();
         if (
           Date.now() > transitionCooldownRef.current &&
-          targetFrameRef.current <= 0.2 &&
-          deltaY < -3 &&
+          transLenis.scroll <= 3 &&
           !isScrolledBackRef.current
         ) {
           isScrolledBackRef.current = true;
           onScrollBackToHeroRef.current?.();
+        } else {
+          transLenis.scrollTo(Math.max(0, transLenis.scroll - 220), {
+            duration: 0.7,
+          });
         }
-      }
-    };
-
-    processDeltaRef.current = processDelta;
-
-    // Direct wheel handler for the window: reliable, captures 100% of wheel events exactly once
-    const handleWindowWheel = (e: WheelEvent) => {
-      if (!isActive || isPortfolioActiveRef.current || isFastForwardingRef.current) return;
-      processDelta(e.deltaY);
-    };
-    window.addEventListener("wheel", handleWindowWheel, { passive: true });
-
-    // Keyboard navigation (ArrowDown, ArrowUp, PageDown, PageUp, Space)
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isActive || isPortfolioActiveRef.current) return;
-      if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ") {
-        e.preventDefault();
-        processDelta(35);
-      } else if (e.key === "ArrowUp" || e.key === "PageUp") {
-        e.preventDefault();
-        processDelta(-35);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      processDeltaRef.current = null;
-      window.removeEventListener("wheel", handleWindowWheel);
       window.removeEventListener("keydown", handleKeyDown);
-      if (animIdRef.current) {
-        cancelAnimationFrame(animIdRef.current);
-        animIdRef.current = null;
+      unsubscribeScroll();
+      unsubscribeVirtual();
+      resizeObserver.disconnect();
+      transLenis.destroy();
+      if (localLenisRef.current === transLenis) {
+        localLenisRef.current = null;
       }
-      wakeAnimationRef.current = null;
     };
-  }, [isActive, lenis, drawFrame, resizeCanvas]);
+  }, [isActive, isPortfolioActive, lenis, drawFrame, resizeCanvas]);
 
   return (
     <div
+      ref={containerRef}
       className={`fixed inset-0 z-50 w-full h-full overflow-hidden select-none ${
         isActive
           ? "opacity-100 pointer-events-auto visible"
@@ -476,12 +499,19 @@ export default function AboutTransition({
     >
       <canvas
         ref={canvasRef}
-        className="w-full h-full object-fill cursor-default block select-none render-high-quality"
+        className="w-full h-full object-fill cursor-default block select-none pointer-events-none render-high-quality"
       />
       <div
         className="absolute inset-0 pointer-events-none video-corner-overlay"
         aria-hidden="true"
       />
+      <div
+        ref={scrollWrapperRef}
+        className="absolute inset-0 z-10 overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:hidden"
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+      >
+        <div ref={scrollContentRef} className="w-full pointer-events-none" />
+      </div>
     </div>
   );
 }

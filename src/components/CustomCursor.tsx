@@ -42,13 +42,19 @@ export default function CustomCursor() {
   useEffect(() => {
     if (!isSupported) return;
 
-    // Preload frames to guarantee zero stutter
+    // Preload and decode cursor frames to guarantee zero stutter
     FRAMES.forEach((src) => {
       const img = new window.Image();
       img.src = src;
+      if ("decode" in img) {
+        img.decode().catch(() => {});
+      }
     });
     const pImg = new window.Image();
     pImg.src = POINTER_SRC;
+    if ("decode" in pImg) {
+      pImg.decode().catch(() => {});
+    }
 
     document.documentElement.classList.add("has-custom-cursor");
 
