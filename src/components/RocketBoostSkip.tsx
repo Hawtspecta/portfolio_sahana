@@ -62,6 +62,7 @@ export default function RocketBoostSkip({
     >
       <button
         type="button"
+        data-cursor="pointer"
         tabIndex={isVisible ? 0 : -1}
         onClick={handleClick}
         className={`absolute hover:scale-105 active:scale-95 transition-transform duration-200 ${
@@ -70,7 +71,7 @@ export default function RocketBoostSkip({
         style={isMobile ? mobileSkipStyle : desktopSkipStyle}
         aria-label="Skip to next section"
       >
-        <div className="relative w-full h-full animate-stop-motion">
+        <div className="relative w-full h-full animate-stop-motion pointer-events-none">
           <NextImage
             src={skipButtonImg}
             alt="Skip"
@@ -79,7 +80,7 @@ export default function RocketBoostSkip({
             loading="eager"
             decoding="sync"
             unoptimized
-            className="object-contain render-high-quality"
+            className="object-contain render-high-quality pointer-events-none"
           />
         </div>
       </button>

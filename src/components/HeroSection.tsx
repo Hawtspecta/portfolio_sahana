@@ -315,25 +315,10 @@ export default function HeroSection({
         images[i - 1] = img;
       };
 
-      // Load first 24 frames immediately so Hero's entry is instant
-      const initialCount = Math.min(24, TOTAL_FRAMES);
-      for (let i = 1; i <= initialCount; i++) {
+      // All hero frames are already cached by SplashScreen; populate imagesRef immediately so Skip never misses end frames
+      for (let i = 1; i <= TOTAL_FRAMES; i++) {
         loadFrame(i);
       }
-
-      // Trickle remaining frames in batches of 12 every 45ms so Hero loads fast over network
-      let nextIdx = initialCount + 1;
-      const trickleTimer = setInterval(() => {
-        if (cancelled || nextIdx > TOTAL_FRAMES) {
-          clearInterval(trickleTimer);
-          return;
-        }
-        const end = Math.min(TOTAL_FRAMES, nextIdx + 11);
-        for (let i = nextIdx; i <= end; i++) {
-          loadFrame(i);
-        }
-        nextIdx = end + 1;
-      }, 45);
 
       const handleWindowResize = () => {
         resizeCanvas();
@@ -342,7 +327,6 @@ export default function HeroSection({
       window.addEventListener("resize", handleWindowResize);
       return () => {
         cancelled = true;
-        clearInterval(trickleTimer);
         window.removeEventListener("resize", handleWindowResize);
       };
     }, [canPreload, drawFrame, resizeCanvas]);

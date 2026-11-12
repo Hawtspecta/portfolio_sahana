@@ -502,6 +502,8 @@ export default function SplashScreen({
 
       if (!isSkippingSplash) {
         const staticImages = [
+          "/assets/cursor/paw-pointer.png",
+          "/assets/cursor/roblox-cursor.png",
           "/assets/transition/bg_port.webp",
           "/assets/transition/pc.webp",
           "/assets/experience_tab.webp",
