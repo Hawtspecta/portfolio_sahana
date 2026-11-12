@@ -235,8 +235,7 @@ export default function AboutTransition({
     }
 
     const lastFrameIndex = TOTAL_FRAMES - 1;
-    const currentHandoff = handoffRef.current;
-    const startFrame = currentHandoff ? 0 : Math.max(0, Math.min(TOTAL_FRAMES - 2, Math.round(smoothFrameRef.current)));
+    const startFrame = Math.max(0, Math.min(TOTAL_FRAMES - 2, Math.round(smoothFrameRef.current)));
     const framesToFastForward = lastFrameIndex - startFrame;
 
     isFastForwardingRef.current = true;
@@ -251,23 +250,15 @@ export default function AboutTransition({
       return;
     }
 
-    const hasHandoff = currentHandoff && currentHandoff.heroFraction < 1;
-    const startTime = hasHandoff ? currentHandoff.startTime : performance.now();
-    const totalDurationMs = hasHandoff ? currentHandoff.totalDurationMs : 1000;
-    const heroFraction = hasHandoff ? currentHandoff.heroFraction : 0;
+    const durationMs = 1100;
+    const startTime = performance.now();
     let lastEmittedPct = -1;
 
     const fastForwardStep = (now: number) => {
       const elapsed = now - startTime;
-      const globalProgress = Math.min(elapsed / totalDurationMs, 1);
-      // Lenis-powered effortless rocket flight and soft landing touchdown S-curve
-      const globalEased = lenisSmoothRocketEase(globalProgress);
-
-      const aboutProgress = heroFraction < 1
-        ? Math.max(0, Math.min(1, (globalEased - heroFraction) / (1 - heroFraction)))
-        : 1;
-
-      const currentFrame = Math.min(lastFrameIndex, Math.round(startFrame + framesToFastForward * aboutProgress));
+      const progress = Math.min(elapsed / durationMs, 1);
+      const easedProgress = lenisSmoothRocketEase(progress);
+      const currentFrame = Math.min(lastFrameIndex, Math.round(startFrame + framesToFastForward * easedProgress));
 
       targetFrameRef.current = currentFrame;
       smoothFrameRef.current = currentFrame;
@@ -278,7 +269,7 @@ export default function AboutTransition({
         onProgressChangeRef.current?.(nextRatio);
       }
 
-      if (globalProgress < 1 && currentFrame < lastFrameIndex) {
+      if (progress < 1 && currentFrame < lastFrameIndex) {
         fastForwardAnimIdRef.current = requestAnimationFrame(fastForwardStep);
       } else {
         fastForwardAnimIdRef.current = null;
@@ -286,6 +277,9 @@ export default function AboutTransition({
         targetFrameRef.current = lastFrameIndex;
         smoothFrameRef.current = lastFrameIndex;
         drawFrame(lastFrameIndex);
+        if (localLenisRef.current) {
+          localLenisRef.current.scrollTo(TRANSITION_RUNWAY_PX, { immediate: true, force: true });
+        }
         onProgressChangeRef.current?.(1);
         onLandingCompleteRef.current?.();
       }

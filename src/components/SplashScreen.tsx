@@ -501,14 +501,37 @@ export default function SplashScreen({
       }
 
       if (!isSkippingSplash) {
-        const staticImages = [
+        const criticalImages = [
           "/assets/cursor/paw-pointer.png",
           "/assets/cursor/roblox-cursor.png",
           "/assets/transition/bg_port.webp",
           "/assets/transition/pc.webp",
+          "/assets/skip button.png",
+        ];
+        for (const url of criticalImages) {
+          queue.push({ kind: "image", url });
+        }
+      }
+
+      const criticalCount = queue.length;
+
+      if (!isSkippingSplash) {
+        for (let i = 1; i <= 119; i++) {
+          queue.push({
+            kind: "image",
+            url: `/assets/hero_frames/${String(i).padStart(3, "0")}.webp`,
+          });
+        }
+        for (let i = 1; i <= 106; i++) {
+          queue.push({
+            kind: "image",
+            url: `/assets/transition/${String(i).padStart(3, "0")}.webp`,
+          });
+        }
+
+        const backgroundImages = [
           "/assets/experience_tab.webp",
           "/assets/small_experience.webp",
-          "/assets/skip button.png",
           "/assets/project_tab_lawbot.png",
           "/assets/project_tab_ufi.png",
           "/assets/project_tab_brew.png",
@@ -541,50 +564,39 @@ export default function SplashScreen({
           "/assets/certificates/nptel-cert.png",
         ];
 
-        for (const url of staticImages) {
+        for (const url of backgroundImages) {
           queue.push({ kind: "image", url });
         }
         queue.push({ kind: "fetch", url: "/assets/transition/pc_click.mp4" });
-
-        for (let i = 1; i <= 119; i++) {
-          queue.push({
-            kind: "image",
-            url: `/assets/hero_frames/${String(i).padStart(3, "0")}.webp`,
-          });
-        }
-        for (let i = 1; i <= 106; i++) {
-          queue.push({
-            kind: "image",
-            url: `/assets/transition/${String(i).padStart(3, "0")}.webp`,
-          });
-        }
       }
 
-      const totalAssets = queue.length;
-      let completedAssets = 0;
+      let completedCritical = 0;
       let splashLoadedCount = 0;
       let cursor = 0;
       const preloadedCache: HTMLImageElement[] = [];
 
-      const onAssetDone = () => {
+      const onAssetDone = (itemIndex: number) => {
         if (cancelled) return;
-        completedAssets++;
-        setLoadProgress(Math.min(100, Math.round((completedAssets / totalAssets) * 100)));
-        if (completedAssets >= totalAssets) {
-          allAssetsReady = true;
-          tryStartSplash();
+        if (itemIndex < criticalCount) {
+          completedCritical++;
+          setLoadProgress(Math.min(100, Math.round((completedCritical / criticalCount) * 100)));
+          if (completedCritical >= criticalCount) {
+            allAssetsReady = true;
+            tryStartSplash();
+          }
         }
       };
 
       const runNext = () => {
         if (cancelled || cursor >= queue.length) return;
-        const item = queue[cursor++];
+        const itemIndex = cursor++;
+        const item = queue[itemIndex];
 
         if (item.kind === "fetch") {
           fetch(item.url)
             .catch(() => { })
             .finally(() => {
-              onAssetDone();
+              onAssetDone(itemIndex);
               runNext();
             });
           return;
@@ -622,7 +634,7 @@ export default function SplashScreen({
                     tryStartSplash();
                   }
                 }
-                onAssetDone();
+                onAssetDone(itemIndex);
                 runNext();
               };
 

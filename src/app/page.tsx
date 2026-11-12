@@ -271,16 +271,13 @@ export default function Home() {
     // Hero typewriter video complete
   }, []);
 
-  // Fast-forward on Hero directly continues through About Transition to Portfolio (no in-between stop!)
-  const handleHeroFastForwardComplete = useCallback((handoff?: FastForwardHandoff) => {
-    setTargetAboutProgress(null);
+  // Fast-forward on Hero lands cleanly at the start of About Transition (step-by-step, matching SplashScreen pattern)
+  const handleHeroFastForwardComplete = useCallback(() => {
+    setTargetAboutProgress(0);
     setTargetHeroProgress(null);
     setHeroFastForwardTrigger(0);
-    if (handoff) {
-      setFastForwardHandoff(handoff);
-    }
+    setFastForwardHandoff(null);
     setIsAboutActive(true);
-    setTransitionFastForwardTrigger(Date.now());
   }, []);
 
   // Scroll forward from hero triggers the Lenis smooth About transition

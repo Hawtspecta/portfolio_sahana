@@ -194,10 +194,6 @@ export default function HeroSection({
     const lastFrameIndex = TOTAL_FRAMES - 1;
     const startFrame = Math.max(0, Math.min(TOTAL_FRAMES - 2, Math.round(smoothFrameRef.current)));
     const framesToFastForward = lastFrameIndex - startFrame;
-    const aboutFrames = 105;
-    const totalFrames = framesToFastForward + aboutFrames;
-    const heroFraction = totalFrames > 0 ? framesToFastForward / totalFrames : 0;
-    const totalDurationMs = 1450;
 
     isFastForwardingRef.current = true;
 
@@ -209,24 +205,19 @@ export default function HeroSection({
       onProgressChangeRef.current?.(1);
       hasCompletedRef.current = true;
       onHeroCompleteRef.current?.();
-      onFastForwardCompleteRef.current?.({
-        startTime: performance.now(),
-        totalDurationMs: 1000,
-        heroFraction: 0,
-      });
+      onFastForwardCompleteRef.current?.();
       return;
     }
 
+    const durationMs = 1100;
     const startTime = performance.now();
     let lastEmittedPct = -1;
 
     const fastForwardStep = (now: number) => {
       const elapsed = now - startTime;
-      const globalProgress = Math.min(elapsed / totalDurationMs, 1);
-      // Lenis-powered effortless rocket takeoff and seamless cruise S-curve
-      const globalEased = lenisSmoothRocketEase(globalProgress);
-      const heroLocalProgress = heroFraction > 0 ? Math.min(1, globalEased / heroFraction) : 1;
-      const currentFrame = Math.min(lastFrameIndex, Math.round(startFrame + framesToFastForward * heroLocalProgress));
+      const progress = Math.min(elapsed / durationMs, 1);
+      const easedProgress = lenisSmoothRocketEase(progress);
+      const currentFrame = Math.min(lastFrameIndex, Math.round(startFrame + framesToFastForward * easedProgress));
 
       targetFrameRef.current = currentFrame;
       smoothFrameRef.current = currentFrame;
@@ -237,7 +228,7 @@ export default function HeroSection({
         onProgressChangeRef.current?.(nextRatio);
       }
 
-      if (globalEased < heroFraction && currentFrame < lastFrameIndex) {
+      if (progress < 1 && currentFrame < lastFrameIndex) {
         fastForwardAnimIdRef.current = requestAnimationFrame(fastForwardStep);
       } else {
         fastForwardAnimIdRef.current = null;
@@ -248,12 +239,7 @@ export default function HeroSection({
         onProgressChangeRef.current?.(1);
         hasCompletedRef.current = true;
         onHeroCompleteRef.current?.();
-        // Seamless handoff: pass the exact trajectory clock & fraction to About Transition
-        onFastForwardCompleteRef.current?.({
-          startTime,
-          totalDurationMs,
-          heroFraction,
-        });
+        onFastForwardCompleteRef.current?.();
       }
     };
 
