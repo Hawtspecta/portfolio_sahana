@@ -53,8 +53,8 @@ export default function AboutTransition({
     isPortfolioActive || (targetProgress != null && targetProgress >= 0.98)
       ? TOTAL_FRAMES - 1
       : targetProgress != null
-      ? Math.min(TOTAL_FRAMES - 1, Math.max(0, Math.round(targetProgress * (TOTAL_FRAMES - 1))))
-      : 0;
+        ? Math.min(TOTAL_FRAMES - 1, Math.max(0, Math.round(targetProgress * (TOTAL_FRAMES - 1))))
+        : 0;
   const targetFrameRef = useRef(initialFrame);
   const smoothFrameRef = useRef(initialFrame);
   const lastDrawnFrameRef = useRef(-1);
@@ -174,7 +174,7 @@ export default function AboutTransition({
       if (!force && drawIdx === lastDrawnFrameRef.current) return;
       lastDrawnFrameRef.current = drawIdx;
       ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
+      ctx.imageSmoothingQuality = "medium";
       ctx.drawImage(targetImg, 0, 0, canvas.width, canvas.height);
     }
   }, []);
@@ -310,7 +310,7 @@ export default function AboutTransition({
       const img = new window.Image();
       img.src = `${FRAME_PATH}${String(i).padStart(3, "0")}${FRAME_EXT}`;
       if ("decode" in img) {
-        img.decode().catch(() => {});
+        img.decode().catch(() => { });
       }
 
       const handleLoad = () => {
@@ -418,6 +418,7 @@ export default function AboutTransition({
     });
     resizeObserver.observe(wrapper);
 
+    let lastEmittedScrollProg = -1;
     const unsubscribeScroll = transLenis.on("scroll", ({ scroll }) => {
       if (isPortfolioActiveRef.current || isFastForwardingRef.current) return;
 
@@ -429,7 +430,14 @@ export default function AboutTransition({
 
       if (frameIdx !== lastDrawnFrameRef.current) {
         drawFrame(frameIdx);
-        onProgressChangeRef.current?.(progress);
+        if (
+          Math.abs(progress - lastEmittedScrollProg) >= 0.05 ||
+          progress <= 0.01 ||
+          progress >= 0.97
+        ) {
+          lastEmittedScrollProg = progress;
+          onProgressChangeRef.current?.(progress);
+        }
       }
 
       if (
@@ -499,11 +507,10 @@ export default function AboutTransition({
   return (
     <div
       ref={containerRef}
-      className={`fixed inset-0 z-50 w-full h-full overflow-hidden select-none ${
-        isActive
+      className={`fixed inset-0 z-50 w-full h-full overflow-hidden select-none ${isActive
           ? "opacity-100 pointer-events-auto visible"
           : "opacity-0 pointer-events-none invisible"
-      }`}
+        }`}
     >
       <canvas
         ref={canvasRef}

@@ -49,8 +49,8 @@ export default function HeroSection({
   const initialFrame = isAboutActive
     ? TOTAL_FRAMES - 1
     : targetProgress != null
-    ? Math.min(TOTAL_FRAMES - 1, Math.max(0, Math.round(targetProgress * (TOTAL_FRAMES - 1))))
-    : 0;
+      ? Math.min(TOTAL_FRAMES - 1, Math.max(0, Math.round(targetProgress * (TOTAL_FRAMES - 1))))
+      : 0;
   const targetFrameRef = useRef(initialFrame);
   const smoothFrameRef = useRef(initialFrame);
   const lastDrawnFrameRef = useRef(-1);
@@ -149,7 +149,7 @@ export default function HeroSection({
       if (!force && drawIdx === lastDrawnFrameRef.current) return;
       lastDrawnFrameRef.current = drawIdx;
       ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
+      ctx.imageSmoothingQuality = "medium";
       ctx.drawImage(targetImg, 0, 0, canvas.width, canvas.height);
     }
   }, []);
@@ -264,58 +264,58 @@ export default function HeroSection({
     }
   }, [isAboutActive, drawFrame]);
 
-    // ─── 3. Staged trickle-preload of 119 hero frames (zero Splash/cursor stutter) ───
-    useEffect(() => {
-      if (!canPreload) return;
-      resizeCanvas();
-      let loaded = 0;
-      let cancelled = false;
-      const images: HTMLImageElement[] = new Array(TOTAL_FRAMES);
-      imagesRef.current = images;
+  // ─── 3. Staged trickle-preload of 119 hero frames (zero Splash/cursor stutter) ───
+  useEffect(() => {
+    if (!canPreload) return;
+    resizeCanvas();
+    let loaded = 0;
+    let cancelled = false;
+    const images: HTMLImageElement[] = new Array(TOTAL_FRAMES);
+    imagesRef.current = images;
 
-      const loadFrame = (i: number) => {
-        if (cancelled) return;
-        const img = new window.Image();
-        img.src = `${FRAME_PATH}${String(i).padStart(3, "0")}${FRAME_EXT}`;
-        if ("decode" in img) {
-          img.decode().catch(() => {});
-        }
-
-        const handleLoad = () => {
-          loaded++;
-          loadedCountRef.current = loaded;
-          if (lastDrawnFrameRef.current < 0) {
-            const targetIdx = Math.max(0, Math.min(TOTAL_FRAMES - 1, Math.round(smoothFrameRef.current)));
-            const targetImg = images[targetIdx];
-            if (targetImg && targetImg.complete && targetImg.naturalWidth > 0) {
-              hasDrawnInitialRef.current = true;
-              drawFrame(targetIdx, true);
-            }
-          }
-          if (loaded === TOTAL_FRAMES) {
-            imagesLoadedRef.current = true;
-          }
-        };
-        img.onload = handleLoad;
-        img.onerror = handleLoad;
-        images[i - 1] = img;
-      };
-
-      // All hero frames are already cached by SplashScreen; populate imagesRef immediately so Skip never misses end frames
-      for (let i = 1; i <= TOTAL_FRAMES; i++) {
-        loadFrame(i);
+    const loadFrame = (i: number) => {
+      if (cancelled) return;
+      const img = new window.Image();
+      img.src = `${FRAME_PATH}${String(i).padStart(3, "0")}${FRAME_EXT}`;
+      if ("decode" in img) {
+        img.decode().catch(() => { });
       }
 
-      const handleWindowResize = () => {
-        resizeCanvas();
-        drawFrame(lastDrawnFrameRef.current >= 0 ? lastDrawnFrameRef.current : 0, true);
+      const handleLoad = () => {
+        loaded++;
+        loadedCountRef.current = loaded;
+        if (lastDrawnFrameRef.current < 0) {
+          const targetIdx = Math.max(0, Math.min(TOTAL_FRAMES - 1, Math.round(smoothFrameRef.current)));
+          const targetImg = images[targetIdx];
+          if (targetImg && targetImg.complete && targetImg.naturalWidth > 0) {
+            hasDrawnInitialRef.current = true;
+            drawFrame(targetIdx, true);
+          }
+        }
+        if (loaded === TOTAL_FRAMES) {
+          imagesLoadedRef.current = true;
+        }
       };
-      window.addEventListener("resize", handleWindowResize);
-      return () => {
-        cancelled = true;
-        window.removeEventListener("resize", handleWindowResize);
-      };
-    }, [canPreload, drawFrame, resizeCanvas]);
+      img.onload = handleLoad;
+      img.onerror = handleLoad;
+      images[i - 1] = img;
+    };
+
+    // All hero frames are already cached by SplashScreen; populate imagesRef immediately so Skip never misses end frames
+    for (let i = 1; i <= TOTAL_FRAMES; i++) {
+      loadFrame(i);
+    }
+
+    const handleWindowResize = () => {
+      resizeCanvas();
+      drawFrame(lastDrawnFrameRef.current >= 0 ? lastDrawnFrameRef.current : 0, true);
+    };
+    window.addEventListener("resize", handleWindowResize);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("resize", handleWindowResize);
+    };
+  }, [canPreload, drawFrame, resizeCanvas]);
 
   // ─── 4. Unified Lenis Smooth Scroll Lifecycle (100% Lenis-Driven) ───
   useEffect(() => {
@@ -386,6 +386,7 @@ export default function HeroSection({
     });
     resizeObserver.observe(wrapper);
 
+    let lastEmittedScrollProg = -1;
     const unsubscribeScroll = heroLenis.on("scroll", ({ scroll }) => {
       if (isAboutActiveRef.current || isFastForwardingRef.current) return;
       lastWheelScrubTimeRef.current = Date.now();
@@ -398,7 +399,14 @@ export default function HeroSection({
 
       if (frameIdx !== lastDrawnFrameRef.current) {
         drawFrame(frameIdx);
-        onProgressChangeRef.current?.(progress);
+        if (
+          Math.abs(progress - lastEmittedScrollProg) >= 0.05 ||
+          progress <= 0.01 ||
+          progress >= 0.97
+        ) {
+          lastEmittedScrollProg = progress;
+          onProgressChangeRef.current?.(progress);
+        }
       }
 
       if (progress >= 0.995 && !hasCompletedRef.current) {
@@ -459,8 +467,8 @@ export default function HeroSection({
     <div
       ref={containerRef}
       className={`fixed inset-0 w-full h-full select-none bg-black transition-opacity duration-700 ease-in-out ${isActive
-          ? `opacity-100 ${isAboutActive ? "pointer-events-none z-30" : "pointer-events-auto z-40"}`
-          : "opacity-0 pointer-events-none z-0"
+        ? `opacity-100 ${isAboutActive ? "pointer-events-none z-30" : "pointer-events-auto z-40"}`
+        : "opacity-0 pointer-events-none z-0"
         }`}
     >
       <canvas
