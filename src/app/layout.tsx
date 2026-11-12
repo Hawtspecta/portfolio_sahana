@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "lenis/dist/lenis.css";
 import "./globals.css";
 import CustomCursor from "@/components/CustomCursor";
+import MobileNotice from "@/components/MobileNotice";
 
 export const metadata: Metadata = {
   title: "Sahana's Portfolio",
@@ -25,6 +26,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full w-full flex flex-col bg-black">
+        <MobileNotice />
         <CustomCursor />
         {children}
       </body>
