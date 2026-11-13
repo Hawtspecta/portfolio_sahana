@@ -168,7 +168,7 @@ function CtaSection({
                   if (onOpenResume) {
                     onOpenResume();
                   } else {
-                    window.open("/assets/Sahana_Nayak_Resume%20(8).pdf", "_blank", "noopener,noreferrer");
+                    window.open("/assets/Sahana_Nayak_Resume.pdf", "_blank", "noopener,noreferrer");
                   }
                 }}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full border-2 border-[#4a2c1d] bg-[#fdf6ec] text-[#2b180e] font-bold text-xs tracking-wide hover:bg-[#f3e1c3] hover:scale-105 active:scale-95 transition-all cursor-pointer"

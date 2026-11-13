@@ -343,10 +343,12 @@ export default function PortfolioSection({
   });
   const scrollPosRef = useRef(scrollPos);
   const [hasEnteredExperience, setHasEnteredExperience] = useState(() => scrollPos >= 1);
+  const [hasEnteredProjects, setHasEnteredProjects] = useState(() => scrollPos >= 1);
   useEffect(() => {
     scrollPosRef.current = scrollPos;
     if (scrollPos >= 1) {
       setHasEnteredExperience(true);
+      setHasEnteredProjects(true);
     }
   }, [scrollPos]);
 
@@ -686,7 +688,7 @@ export default function PortfolioSection({
           label: 'Download Resume (PDF)',
           onClick: () => {
             const a = document.createElement("a");
-            a.href = "/assets/Sahana_Nayak_Resume%20(8).pdf";
+            a.href = "/assets/Sahana_Nayak_Resume.pdf";
             a.download = "Sahana_Nayak_Resume.pdf";
             a.click();
           }
@@ -756,7 +758,7 @@ export default function PortfolioSection({
     if (isActive) {
       enteredTimerRef.current = setTimeout(() => {
         setEntered(true);
-      }, 50);
+      }, 200);
     }
 
     return () => {
@@ -1054,8 +1056,8 @@ export default function PortfolioSection({
         aria-hidden="true"
       />
 
-      {/* LetterGlitch effect layered on top of bg_port (paused/unmounted when inside ExperienceSection or modals) */}
-      {isActive && scrollPos < 2 && !selectedProject && !showVideo && (
+      {/* LetterGlitch effect layered on top of bg_port (deferred until landing settles, unmounted when in ExperienceSection/modals) */}
+      {isActive && entered && scrollPos < 2 && !selectedProject && !showVideo && (
         <div
           className="absolute top-0 left-0 right-0 h-[92%] pointer-events-none opacity-55 overflow-hidden transition-opacity duration-500"
           style={scrollPos === 0 ? dynamicMaskStyle : undefined}
@@ -1141,8 +1143,8 @@ export default function PortfolioSection({
             {scrollPos === 0 && (
               <div
                 className={`pointer-events-none absolute z-10 transition-opacity duration-500 ease-out ${showEntered && !showVideo && !isHovered
-                    ? "opacity-100"
-                    : "opacity-0"
+                  ? "opacity-100"
+                  : "opacity-0"
                   }`}
                 style={{
                   left: `${PC_LEFT + PC_WIDTH / 2}%`,
@@ -1153,8 +1155,8 @@ export default function PortfolioSection({
                   type="button"
                   onClick={handlePcClick}
                   className={`pc-click-hint inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs sm:text-[13px] tracking-wide backdrop-blur-md transition-transform duration-200 hover:scale-105 ${showEntered && !showVideo && !isHovered
-                      ? "pointer-events-auto cursor-pointer"
-                      : "pointer-events-none"
+                    ? "pointer-events-auto cursor-pointer"
+                    : "pointer-events-none"
                     }`}
                   style={{ fontFamily: "'Special Elite', cursive" }}
                 >
@@ -1359,23 +1361,25 @@ export default function PortfolioSection({
                       transition: "mask-image 0.3s ease, -webkit-mask-image 0.3s ease",
                     }}
                   >
-                    <FlexCarousel
-                      ref={carouselRef}
-                      items={PROJECT_ITEMS}
-                      preset="liquid"
-                      intro="none"
-                      cardHeight={0.58}
-                      gap={14}
-                      squeeze={0}
-                      focusOnClick={false}
-                      captions
-                      tilt={-180}
-                      bend={0}
-                      liquid={0}
-                      onChange={(idx) => setCurrentTab(idx)}
-                      onSelect={(idx) => handleSelectProject(PROJECT_ITEMS[idx])}
-                      onScrollPrev={handleScrollUpFromCarousel}
-                    />
+                    {(scrollPos >= 1 || hasEnteredProjects) && (
+                      <FlexCarousel
+                        ref={carouselRef}
+                        items={PROJECT_ITEMS}
+                        preset="liquid"
+                        intro="none"
+                        cardHeight={0.58}
+                        gap={14}
+                        squeeze={0}
+                        focusOnClick={false}
+                        captions
+                        tilt={-180}
+                        bend={0}
+                        liquid={0}
+                        onChange={(idx) => setCurrentTab(idx)}
+                        onSelect={(idx) => handleSelectProject(PROJECT_ITEMS[idx])}
+                        onScrollPrev={handleScrollUpFromCarousel}
+                      />
+                    )}
                   </div>
                 </div>
               </div>
@@ -1456,8 +1460,8 @@ export default function PortfolioSection({
       {/* Visible starting from the About section, anchored directly on the bottom brown bar */}
       <div
         className={`absolute bottom-0 left-0 right-0 h-[8%] min-h-[64px] z-30 flex items-center justify-center pointer-events-none transition-all duration-300 ease-out ${selectedProject || isVideoPlaying
-            ? "opacity-0 pointer-events-none translate-y-6"
-            : "opacity-100 translate-y-0"
+          ? "opacity-0 pointer-events-none translate-y-6"
+          : "opacity-100 translate-y-0"
           }`}
       >
         <div className="relative w-full h-full pointer-events-none flex items-center justify-center">
@@ -1829,7 +1833,7 @@ export default function PortfolioSection({
               </span>
               <div className="flex items-center gap-2 pr-3">
                 <a
-                  href="/assets/Sahana_Nayak_Resume%20(8).pdf"
+                  href="/assets/Sahana_Nayak_Resume.pdf"
                   download="Sahana_Nayak_Resume.pdf"
                   className="px-3 py-1 rounded border border-[#4a2c1d] bg-[#fdf6ec] text-[11px] font-bold tracking-wider uppercase text-[#2b180e] shadow-[2px_2px_0_#4a2c1d] hover:bg-[#efe0ce] cursor-pointer transition-transform hover:-translate-y-0.5"
                   style={{ fontFamily: "'Space Mono', monospace" }}
@@ -1841,7 +1845,7 @@ export default function PortfolioSection({
 
             <div className="flex-1 w-full bg-[#e9dcc9] rounded-b-[6px] overflow-hidden native-site-cursor">
               <iframe
-                src="/assets/Sahana_Nayak_Resume%20(8).pdf#view=FitH"
+                src="/assets/Sahana_Nayak_Resume.pdf#view=FitH"
                 title="Sahana Nayak Resume"
                 className="w-full h-full border-0"
               />

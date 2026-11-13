@@ -511,8 +511,8 @@ export default function Home() {
         handoff={fastForwardHandoff}
       />
 
-      {/* Portfolio section — mounted only near end of Transition so Transition scrubbing keeps 100% CPU/GPU */}
-      {(isPortfolioActive || (isAboutActive && transitionProgress >= 0.85)) && (
+      {/* Portfolio section — mounted when Transition begins so no heavy DOM mounting interrupts the approach to About Me */}
+      {(isAboutActive || isPortfolioActive) && (
         <PortfolioSection
           isActive={isAboutActive && isPortfolioActive}
           externalScrollProgress={targetPortfolioProgress}

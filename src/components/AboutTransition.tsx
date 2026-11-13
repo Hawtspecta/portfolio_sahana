@@ -66,6 +66,7 @@ export default function AboutTransition({
   const aboutHoldUntilRef = useRef(0);
   const scrollBackAccumulatorRef = useRef(0);
   const scrollBackCooldownRef = useRef(0);
+  const lastWheelScrubTimeRef = useRef(0);
   const isLandingRef = useRef(false);
 
   const isPortfolioActiveRef = useRef(isPortfolioActive);
@@ -123,9 +124,9 @@ export default function AboutTransition({
   const imagesLoadedRef = useRef(false);
 
   // ─── 1. Resize Canvas with Optimal Crisp Buffer (fast 60/120fps) ──
-  const resizeCanvas = useCallback(() => {
+  const resizeCanvas = useCallback((): boolean => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) return false;
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     const targetW = Math.round(window.innerWidth * dpr);
     const targetH = Math.round(window.innerHeight * dpr);
@@ -133,7 +134,14 @@ export default function AboutTransition({
     if (canvas.width !== targetW || canvas.height !== targetH) {
       canvas.width = targetW;
       canvas.height = targetH;
+      const ctx = canvas.getContext("2d", { alpha: false });
+      if (ctx) {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "medium";
+      }
+      return true;
     }
+    return false;
   }, []);
 
   // ─── 2. Draw Frame to Canvas (Crisp Single Frame, Zero Ghosting) ───
@@ -182,6 +190,11 @@ export default function AboutTransition({
   // Handle external navigation target progress
   useEffect(() => {
     if (targetProgress != null && isActive) {
+      // Never let an async React prop update fight recent direct wheel scrubbing
+      if (Date.now() - lastWheelScrubTimeRef.current < 220) {
+        onProgressChangeRef.current?.(targetFrameRef.current / (TOTAL_FRAMES - 1));
+        return;
+      }
       isLandingRef.current = false;
       const frame = Math.min(
         TOTAL_FRAMES - 1,
@@ -309,7 +322,7 @@ export default function AboutTransition({
       if (cancelled) return;
       const img = new window.Image();
       img.src = `${FRAME_PATH}${String(i).padStart(3, "0")}${FRAME_EXT}`;
-      if (i <= 24 && "decode" in img) {
+      if ("decode" in img) {
         img.decode().catch(() => { });
       }
 
@@ -421,6 +434,7 @@ export default function AboutTransition({
     let lastEmittedScrollProg = -1;
     const unsubscribeScroll = transLenis.on("scroll", ({ scroll }) => {
       if (isPortfolioActiveRef.current || isFastForwardingRef.current) return;
+      lastWheelScrubTimeRef.current = Date.now();
 
       const progress = Math.max(0, Math.min(1, scroll / TRANSITION_RUNWAY_PX));
       const frameIdx = Math.round(progress * (TOTAL_FRAMES - 1));
@@ -502,7 +516,7 @@ export default function AboutTransition({
         localLenisRef.current = null;
       }
     };
-  }, [isActive, isPortfolioActive, lenis, drawFrame, resizeCanvas]);
+  }, [isActive, lenis, drawFrame, resizeCanvas]);
 
   return (
     <div
