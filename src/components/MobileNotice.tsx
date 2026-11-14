@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 
 const subscribe = (callback: () => void) => {
   window.addEventListener("resize", callback);
@@ -15,9 +15,8 @@ const getIsMobile = () => {
 
 export default function MobileNotice() {
   const isMobile = useSyncExternalStore(subscribe, getIsMobile, () => false);
-  const [dismissed, setDismissed] = useState(false);
 
-  if (!isMobile || dismissed) return null;
+  if (!isMobile) return null;
 
   return (
     <div
@@ -52,20 +51,11 @@ export default function MobileNotice() {
           Open on Desktop or Laptop
         </h2>
         <p
-          className="text-sm text-[#3d2314]/90 leading-relaxed mb-5"
+          className="text-sm text-[#3d2314]/90 leading-relaxed"
           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
         >
           This interactive 3D portfolio is designed for a larger screen, mouse, and keyboard. Please switch to a desktop or laptop for the best experience.
         </p>
-
-        <button
-          type="button"
-          onClick={() => setDismissed(true)}
-          className="w-full px-4 py-2.5 rounded-full border-2 border-[#4a2c1d] bg-[#2b180e] text-[#fbf6ec] text-xs font-bold uppercase tracking-wider hover:bg-[#3d2314] active:scale-95 transition-all cursor-pointer"
-          style={{ fontFamily: "'Space Mono', monospace" }}
-        >
-          Continue Anyway
-        </button>
       </div>
     </div>
   );
