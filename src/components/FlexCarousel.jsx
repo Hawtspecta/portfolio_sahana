@@ -501,24 +501,28 @@ const FlexCarousel = forwardRef(({
         texture.update();
         slot.image = [image.naturalWidth || 1, image.naturalHeight || 1];
         slot.aspect = slot.image[0] / slot.image[1];
-        try {
-          const probe = document.createElement('canvas');
-          probe.width = 8;
-          probe.height = 8;
-          const ctx = probe.getContext('2d', { willReadFrequently: true });
-          if (ctx) {
-            ctx.drawImage(image, 0, 0, 8, 8);
-            const data = ctx.getImageData(0, 0, 8, 8).data;
-            const avg = [0, 0, 0];
-            for (let i = 0; i < data.length; i += 4) {
-              avg[0] += data[i];
-              avg[1] += data[i + 1];
-              avg[2] += data[i + 2];
+        if (item.color && Array.isArray(item.color)) {
+          slot.color = item.color;
+        } else {
+          try {
+            const probe = document.createElement('canvas');
+            probe.width = 8;
+            probe.height = 8;
+            const ctx = probe.getContext('2d', { willReadFrequently: true });
+            if (ctx) {
+              ctx.drawImage(image, 0, 0, 8, 8);
+              const data = ctx.getImageData(0, 0, 8, 8).data;
+              const avg = [0, 0, 0];
+              for (let i = 0; i < data.length; i += 4) {
+                avg[0] += data[i];
+                avg[1] += data[i + 1];
+                avg[2] += data[i + 2];
+              }
+              slot.color = avg.map(v => v / 64 / 255);
             }
-            slot.color = avg.map(v => v / 64 / 255);
+          } catch {
+            slot.color = [0.5, 0.5, 0.5];
           }
-        } catch {
-          slot.color = [0.5, 0.5, 0.5];
         }
         slot.loaded = true;
         dirty = true;

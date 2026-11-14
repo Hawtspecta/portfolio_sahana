@@ -9,11 +9,23 @@ import {
 } from "react";
 import Lenis from "lenis";
 import { lenisSmoothRocketEase } from "@/lib/lenis";
+import {
+  getSplashImages,
+  getBestAvailableFrame,
+  preloadSplashFrames,
+  preloadHeroFrames,
+  preloadTransitionFrames,
+  preloadIdleAssets,
+  subscribeFrameReady,
+  TOTAL_SPLASH_FRAMES,
+  SPLASH_START_FRAME,
+  SPLASH_END_FRAME,
+} from "@/lib/frameCache";
 
-const START_FRAME = 6;
-const END_FRAME = 201;
+const START_FRAME = SPLASH_START_FRAME;
+const END_FRAME = SPLASH_END_FRAME;
 
-const TOTAL_FRAMES = END_FRAME - START_FRAME + 1; // 196 frames starting from frame 6
+const TOTAL_FRAMES = TOTAL_SPLASH_FRAMES; // 196 frames starting from frame 6
 const FULL_AUDIO_DURATION = 6.7; // original 201 frames duration in seconds
 const AUDIO_START_OFFSET = ((START_FRAME - 1) / 201) * FULL_AUDIO_DURATION; // ~0.167s
 const AUDIO_END_TIME = ((END_FRAME - 1) / 201) * FULL_AUDIO_DURATION; // ~6.667s
@@ -62,6 +74,7 @@ export default function SplashScreen({
   onReady,
 }: SplashScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const imagesRef = useRef<HTMLImageElement[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -130,27 +143,24 @@ export default function SplashScreen({
     if (canvas.width !== targetW || canvas.height !== targetH) {
       canvas.width = targetW;
       canvas.height = targetH;
+      ctxRef.current = canvas.getContext("2d", { alpha: false });
     }
   }, []);
 
   // ─── Draw a specific frame onto the canvas ────────────────────────
   const drawFrame = useCallback((frameIndex: number) => {
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d", { alpha: false });
-    if (!canvas || !ctx) return;
+    if (!canvas) return;
+    const ctx = ctxRef.current || (ctxRef.current = canvas.getContext("2d", { alpha: false }));
+    if (!ctx) return;
 
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
 
-    const targetImg = imagesRef.current[frameIndex];
-    if (targetImg && targetImg.complete && targetImg.naturalWidth > 0) {
-      currentRenderedFrameRef.current = frameIndex;
-      ctx.drawImage(targetImg, 0, 0, canvas.width, canvas.height);
-    } else {
-      const fallbackImg = imagesRef.current[currentRenderedFrameRef.current];
-      if (fallbackImg && fallbackImg.complete && fallbackImg.naturalWidth > 0) {
-        ctx.drawImage(fallbackImg, 0, 0, canvas.width, canvas.height);
-      }
+    const { img, actualIndex } = getBestAvailableFrame(getSplashImages(), frameIndex, TOTAL_FRAMES);
+    if (img && img.complete && img.naturalWidth > 0) {
+      currentRenderedFrameRef.current = actualIndex;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     }
   }, []);
 
@@ -458,15 +468,12 @@ export default function SplashScreen({
 
     let cancelled = false;
     const isSkippingSplash = wasHeroActiveRef.current || isHeroActiveRef.current;
-    let splashBufferReady = false;
-    let allAssetsReady = isSkippingSplash;
     let minHamsterElapsed = isSkippingSplash;
-    const images: HTMLImageElement[] = new Array(TOTAL_FRAMES);
-    imagesRef.current = images;
+    let splashAssetsReady = isSkippingSplash;
 
     const tryStartSplash = () => {
       if (cancelled || hasStartedPlaybackRef.current) return;
-      if (!splashBufferReady || !allAssetsReady || !minHamsterElapsed) return;
+      if (!splashAssetsReady || !minHamsterElapsed) return;
       hasStartedPlaybackRef.current = true;
       setReady(true);
       onReadyRef.current?.();
@@ -477,182 +484,52 @@ export default function SplashScreen({
         currentRenderedFrameRef.current = 0;
         drawFrame(0);
       }
+      // Fire keyframe background preloads immediately for butter-smooth Hero & Transition
+      preloadHeroFrames();
+      preloadTransitionFrames();
+      preloadIdleAssets();
     };
 
     const hamsterTimer = setTimeout(() => {
       minHamsterElapsed = true;
       tryStartSplash();
-    }, 2600);
+    }, 2400);
 
-      // Build ordered asset preload queue: Splash -> BG -> Hero -> Transition -> Projects -> Experience
-      type QueueItem =
-        | { kind: "splash"; index: number; url: string }
-        | { kind: "image"; url: string }
-        | { kind: "fetch"; url: string };
-
-      const queue: QueueItem[] = [];
-      for (let i = 0; i < TOTAL_FRAMES; i++) {
-        const frameNum = START_FRAME + i;
-        queue.push({
-          kind: "splash",
-          index: i,
-          url: `${FRAME_PATH}${String(frameNum).padStart(3, "0")}${FRAME_EXT}`,
-        });
-      }
-
-      if (!isSkippingSplash) {
-        const criticalImages = [
-          "/assets/cursor/paw-pointer.png",
-          "/assets/cursor/roblox-cursor.png",
-          "/assets/transition/bg_port.webp",
-          "/assets/transition/pc.webp",
-          "/assets/skip button.png",
-        ];
-        for (const url of criticalImages) {
-          queue.push({ kind: "image", url });
-        }
-      }
-
-      const criticalCount = queue.length;
-
-      if (!isSkippingSplash) {
-        for (let i = 1; i <= 119; i++) {
-          queue.push({
-            kind: "image",
-            url: `/assets/hero_frames/${String(i).padStart(3, "0")}.webp`,
-          });
-        }
-        for (let i = 1; i <= 106; i++) {
-          queue.push({
-            kind: "image",
-            url: `/assets/transition/${String(i).padStart(3, "0")}.webp`,
-          });
-        }
-
-        const backgroundImages = [
-          "/assets/experience_tab.webp",
-          "/assets/small_experience.webp",
-          "/assets/project_tab_lawbot.png",
-          "/assets/project_tab_ufi.png",
-          "/assets/project_tab_brew.png",
-          "/assets/project_tab_india.png",
-          "/assets/project_tab_resume.png",
-          "/assets/raw_project_tab_lawbot.png",
-          "/assets/raw_project_tab_ufi.png",
-          "/assets/raw_project_tab_brew.png",
-          "/assets/raw_project_tab_india.png",
-          "/assets/raw_project_tab_resume.png",
-          "/assets/experience/1.webp",
-          "/assets/experience/2.webp",
-          "/assets/experience/3.webp",
-          "/assets/experience/4.webp",
-          "/assets/experience/5.webp",
-          "/assets/experience/6.webp",
-          "/assets/experience/7.webp",
-          "/assets/experience/8.webp",
-          "/assets/invizn/boho_mehfil_screenshot_upscaled.png",
-          "/assets/invizn/Pastel Wedding Venue Design Studio.png",
-          "/assets/invizn/venue_arch_upscaled_2x.jpg",
-          "/assets/invizn/wedding_stage_upscaled_2x.jpg",
-          "/assets/freelance/glamator_spotlight.jpg",
-          "/assets/freelance/myriad_ecosystem.png",
-          "/assets/freelance/myriad_journey.jpg",
-          "/assets/freelance/myriad_services.png",
-          "/assets/certificates/adf-certificate.png",
-          "/assets/certificates/google-aiml-certificate.png",
-          "/assets/certificates/jpmc-software-engineering.png",
-          "/assets/certificates/nptel-cert.png",
-        ];
-
-        for (const url of backgroundImages) {
-          queue.push({ kind: "image", url });
-        }
-        queue.push({ kind: "fetch", url: "/assets/transition/pc_click.mp4" });
-      }
-
-      let completedCritical = 0;
-      let splashLoadedCount = 0;
-      let cursor = 0;
-      const preloadedCache: HTMLImageElement[] = [];
-
-      const onAssetDone = (itemIndex: number) => {
-        if (cancelled) return;
-        if (itemIndex < criticalCount) {
-          completedCritical++;
-          setLoadProgress(Math.min(100, Math.round((completedCritical / criticalCount) * 100)));
-          if (completedCritical >= criticalCount) {
-            allAssetsReady = true;
-            tryStartSplash();
+    // Subscribe to first frame and early buffer
+    const unsub = subscribeFrameReady((section, index) => {
+      if (cancelled) return;
+      if (section === "splash") {
+        if (!hasDrawnFirstFrameRef.current && index === 0) {
+          hasDrawnFirstFrameRef.current = true;
+          setFirstFrameReady(true);
+          resizeCanvas();
+          if (!wasHeroActiveRef.current && !isHeroActiveRef.current) {
+            targetFrameRef.current = 0;
+            smoothFrameRef.current = 0;
+            currentRenderedFrameRef.current = 0;
+            drawFrame(0);
           }
         }
-      };
+      }
+    });
 
-      const runNext = () => {
-        if (cancelled || cursor >= queue.length) return;
-        const itemIndex = cursor++;
-        const item = queue[itemIndex];
+    preloadSplashFrames((percent) => {
+      if (!cancelled) {
+        setLoadProgress(percent);
+      }
+    }).then(() => {
+      if (!cancelled) {
+        splashAssetsReady = true;
+        tryStartSplash();
+      }
+    });
 
-        if (item.kind === "fetch") {
-          fetch(item.url)
-            .catch(() => { })
-            .finally(() => {
-              onAssetDone(itemIndex);
-              runNext();
-            });
-          return;
-        }
-
-        const img = new window.Image();
-        img.src = item.url;
-        if ("decode" in img) {
-          img.decode().catch(() => { });
-        }
-
-          if (item.kind === "splash") {
-            images[item.index] = img;
-          } else {
-            preloadedCache.push(img);
-          }
-
-          const handleLoad = () => {
-            if (cancelled) return;
-                if (item.kind === "splash") {
-                  splashLoadedCount++;
-                  if (!hasDrawnFirstFrameRef.current && images[0]?.complete && images[0]?.naturalWidth > 0) {
-                    hasDrawnFirstFrameRef.current = true;
-                    setFirstFrameReady(true);
-                    resizeCanvas();
-                    if (!wasHeroActiveRef.current && !isHeroActiveRef.current) {
-                      targetFrameRef.current = 0;
-                      smoothFrameRef.current = 0;
-                      currentRenderedFrameRef.current = 0;
-                      drawFrame(0);
-                    }
-                  }
-                  if (splashLoadedCount >= Math.min(25, TOTAL_FRAMES) || splashLoadedCount === TOTAL_FRAMES) {
-                    splashBufferReady = true;
-                    tryStartSplash();
-                  }
-                }
-                onAssetDone(itemIndex);
-                runNext();
-              };
-
-            img.onload = handleLoad;
-            img.onerror = handleLoad;
-          };
-
-            const CONCURRENCY = 10;
-            for (let w = 0; w < Math.min(CONCURRENCY, queue.length); w++) {
-              runNext();
-            }
-
-            return () => {
-              cancelled = true;
-              clearTimeout(hamsterTimer);
-              preloadedCache.length = 0;
-            };
-          }, [mounted, drawFrame, resizeCanvas]);
+    return () => {
+      cancelled = true;
+      clearTimeout(hamsterTimer);
+      unsub();
+    };
+  }, [mounted, drawFrame, resizeCanvas]);
 
   // ─── Auto-start video playback when ready ─────────────────────────
   useEffect(() => {

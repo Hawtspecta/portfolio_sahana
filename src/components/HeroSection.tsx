@@ -3,11 +3,16 @@
 import { useRef, useEffect, useCallback } from "react";
 import Lenis from "lenis";
 import { lenisSmoothRocketEase } from "@/lib/lenis";
+import {
+  getHeroImages,
+  getBestAvailableFrame,
+  preloadHeroFrames,
+  subscribeFrameReady,
+  TOTAL_HERO_FRAMES,
+} from "@/lib/frameCache";
 
-const TOTAL_FRAMES = 119;
+const TOTAL_FRAMES = TOTAL_HERO_FRAMES; // 119
 const HERO_RUNWAY_PX = 2200;
-const FRAME_PATH = "/assets/hero_frames/ezgif-frame-";
-const FRAME_EXT = ".webp";
 
 export interface FastForwardHandoff {
   startTime: number;
@@ -40,11 +45,11 @@ export default function HeroSection({
   fastForwardTrigger,
 }: HeroSectionProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollWrapperRef = useRef<HTMLDivElement>(null);
   const scrollContentRef = useRef<HTMLDivElement>(null);
   const localLenisRef = useRef<Lenis | null>(null);
-  const imagesRef = useRef<HTMLImageElement[]>([]);
 
   const initialFrame = isAboutActive
     ? TOTAL_FRAMES - 1
@@ -87,8 +92,7 @@ export default function HeroSection({
     targetProgressRef.current = targetProgress;
   }, [targetProgress]);
 
-  const imagesLoadedRef = useRef(false);
-  const loadedCountRef = useRef(0);
+
 
   // ─── 1. Resize Canvas with Optimal Crisp Buffer (fast 60/120fps) ──
   const resizeCanvas = useCallback((): boolean => {
@@ -102,6 +106,7 @@ export default function HeroSection({
       canvas.width = targetW;
       canvas.height = targetH;
       const ctx = canvas.getContext("2d", { alpha: false });
+      ctxRef.current = ctx;
       if (ctx) {
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
@@ -115,42 +120,18 @@ export default function HeroSection({
   const drawFrame = useCallback((frameIndex: number, force = false) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d", { alpha: false });
+    const ctx = ctxRef.current || (ctxRef.current = canvas.getContext("2d", { alpha: false }));
     if (!ctx) return;
 
     const idx = Math.max(0, Math.min(TOTAL_FRAMES - 1, Math.round(frameIndex)));
-    if (!force && idx === lastDrawnFrameRef.current) return;
+    const { img, actualIndex } = getBestAvailableFrame(getHeroImages(), idx, TOTAL_FRAMES);
 
-    let drawIdx = idx;
-    let targetImg: HTMLImageElement | undefined = imagesRef.current[drawIdx];
-    if (!targetImg || !targetImg.complete || targetImg.naturalWidth === 0) {
-      targetImg = undefined;
-      for (let offset = 1; offset < TOTAL_FRAMES; offset++) {
-        if (idx - offset >= 0) {
-          const prevImg = imagesRef.current[idx - offset];
-          if (prevImg && prevImg.complete && prevImg.naturalWidth > 0) {
-            drawIdx = idx - offset;
-            targetImg = prevImg;
-            break;
-          }
-        }
-        if (idx + offset < TOTAL_FRAMES) {
-          const nextImg = imagesRef.current[idx + offset];
-          if (nextImg && nextImg.complete && nextImg.naturalWidth > 0) {
-            drawIdx = idx + offset;
-            targetImg = nextImg;
-            break;
-          }
-        }
-      }
-    }
-
-    if (targetImg && targetImg.complete && targetImg.naturalWidth > 0) {
-      if (!force && drawIdx === lastDrawnFrameRef.current) return;
-      lastDrawnFrameRef.current = drawIdx;
+    if (img && img.complete && img.naturalWidth > 0) {
+      if (!force && actualIndex === lastDrawnFrameRef.current) return;
+      lastDrawnFrameRef.current = actualIndex;
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "medium";
-      ctx.drawImage(targetImg, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     }
   }, []);
 
@@ -264,55 +245,37 @@ export default function HeroSection({
     }
   }, [isAboutActive, drawFrame]);
 
-  // ─── 3. Staged trickle-preload of 119 hero frames (zero Splash/cursor stutter) ───
+  // ─── 3. Staged preload & dynamic frame upgrade subscription ───
   useEffect(() => {
     if (!canPreload) return;
     resizeCanvas();
-    let loaded = 0;
-    let cancelled = false;
-    const images: HTMLImageElement[] = new Array(TOTAL_FRAMES);
-    imagesRef.current = images;
+    preloadHeroFrames();
 
-    const loadFrame = (i: number) => {
-      if (cancelled) return;
-      const img = new window.Image();
-      img.src = `${FRAME_PATH}${String(i).padStart(3, "0")}${FRAME_EXT}`;
-      if ("decode" in img) {
-        img.decode().catch(() => { });
-      }
-
-      const handleLoad = () => {
-        loaded++;
-        loadedCountRef.current = loaded;
-        if (lastDrawnFrameRef.current < 0) {
-          const targetIdx = Math.max(0, Math.min(TOTAL_FRAMES - 1, Math.round(smoothFrameRef.current)));
-          const targetImg = images[targetIdx];
-          if (targetImg && targetImg.complete && targetImg.naturalWidth > 0) {
-            hasDrawnInitialRef.current = true;
-            drawFrame(targetIdx, true);
-          }
-        }
-        if (loaded === TOTAL_FRAMES) {
-          imagesLoadedRef.current = true;
-        }
-      };
-      img.onload = handleLoad;
-      img.onerror = handleLoad;
-      images[i - 1] = img;
-    };
-
-    // All hero frames are already cached by SplashScreen; populate imagesRef immediately so Skip never misses end frames
-    for (let i = 1; i <= TOTAL_FRAMES; i++) {
-      loadFrame(i);
+    // Paint initial frame as soon as one is available
+    if (lastDrawnFrameRef.current < 0) {
+      const targetIdx = Math.max(0, Math.min(TOTAL_FRAMES - 1, Math.round(smoothFrameRef.current)));
+      drawFrame(targetIdx, true);
     }
+
+    // When an exact or closer frame finishes loading in background, upgrade canvas immediately
+    const unsub = subscribeFrameReady((section, index) => {
+      if (section !== "hero") return;
+      const targetIdx = Math.max(0, Math.min(TOTAL_FRAMES - 1, Math.round(smoothFrameRef.current)));
+      const drawnIdx = lastDrawnFrameRef.current;
+
+      if (drawnIdx < 0 || Math.abs(index - targetIdx) < Math.abs(drawnIdx - targetIdx)) {
+        drawFrame(targetIdx, true);
+      }
+    });
 
     const handleWindowResize = () => {
       resizeCanvas();
       drawFrame(lastDrawnFrameRef.current >= 0 ? lastDrawnFrameRef.current : 0, true);
     };
     window.addEventListener("resize", handleWindowResize);
+
     return () => {
-      cancelled = true;
+      unsub();
       window.removeEventListener("resize", handleWindowResize);
     };
   }, [canPreload, drawFrame, resizeCanvas]);

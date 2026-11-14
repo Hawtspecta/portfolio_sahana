@@ -67,6 +67,7 @@ const PROJECT_ITEMS = [
     subtitle: "Legal Intelligence Platform",
     expandSrc: "/assets/raw_project_tab_lawbot.png",
     demoUrl: "https://ai-law-bot-nu.vercel.app/",
+    color: [0.18, 0.22, 0.32],
   },
   {
     src: "/assets/project_tab_ufi.png",
@@ -75,6 +76,7 @@ const PROJECT_ITEMS = [
     subtitle: "Aadhaar Update Friction Index",
     expandSrc: "/assets/raw_project_tab_ufi.png",
     demoUrl: "https://ufi-omega.vercel.app/",
+    color: [0.25, 0.28, 0.32],
   },
   {
     src: "/assets/project_tab_brew.png",
@@ -83,6 +85,7 @@ const PROJECT_ITEMS = [
     subtitle: "Artisanal Coffee & Experience",
     expandSrc: "/assets/raw_project_tab_brew.png",
     demoUrl: "https://urban-brew-ten.vercel.app/",
+    color: [0.38, 0.24, 0.16],
   },
   {
     src: "/assets/project_tab_india.png",
@@ -91,6 +94,7 @@ const PROJECT_ITEMS = [
     subtitle: "Cultural Storytelling Hub",
     expandSrc: "/assets/raw_project_tab_india.png",
     demoUrl: "https://india-connect-hub.vercel.app/",
+    color: [0.42, 0.26, 0.18],
   },
   {
     src: "/assets/project_tab_resume.png",
@@ -99,6 +103,7 @@ const PROJECT_ITEMS = [
     subtitle: "ATS & Resume Optimization",
     expandSrc: "/assets/raw_project_tab_resume.png",
     demoUrl: "https://ai-resume-analyzer-dun-one.vercel.app/",
+    color: [0.22, 0.26, 0.35],
   },
 ];
 
@@ -172,7 +177,7 @@ function ProjectsIntroHeadline({ animKey }: { animKey: number }) {
         {quoteWords.map((word, wIdx) => (
           <span key={`pq-${wIdx}`} className="inline-block whitespace-nowrap mx-[0.18em]">
             {word.split("").map((char, cIdx) => {
-              const delay = 140 + charCount * 26;
+              const delay = 40 + charCount * 30;
               charCount++;
               return (
                 <span
@@ -190,7 +195,7 @@ function ProjectsIntroHeadline({ animKey }: { animKey: number }) {
           className="inline-block ml-1 font-normal opacity-80 proj-typewriter-caret"
           style={{
             color: "var(--exp-caret-color, #2b180e)",
-            animationDelay: `${180 + charCount * 26}ms`,
+            animationDelay: `${40 + charCount * 30 + 60}ms`,
           }}
         >
           _
@@ -312,24 +317,48 @@ export default function PortfolioSection({
     };
   }, [isActive]);
 
-  // Preload & decode all expanded project tab images once Portfolio is active (avoiding contention during Transition skip)
+  // Preload carousel card thumbnails first; defer heavy expanded full-resolution screenshots to idle time
   useEffect(() => {
     if (!isActive) return;
     const preloaded: HTMLImageElement[] = [];
-    const timer = setTimeout(() => {
-      for (const item of PROJECT_ITEMS) {
-        for (const url of [item.expandSrc, item.src]) {
-          const img = new window.Image();
-          img.src = url;
-          if ("decode" in img) {
-            img.decode().catch(() => { });
-          }
-          preloaded.push(img);
-        }
+
+    // Preload lightweight card tabs
+    for (const item of PROJECT_ITEMS) {
+      const img = new window.Image();
+      img.src = item.src;
+      if ("decode" in img) {
+        img.decode().catch(() => { });
       }
-    }, 150);
+      preloaded.push(img);
+    }
+
+    // Defer large raw screenshots (~8.5MB total) until browser is completely idle
+    let idleId: number | null = null;
+    const loadHeavyScreenshots = () => {
+      for (const item of PROJECT_ITEMS) {
+        const img = new window.Image();
+        img.src = item.expandSrc;
+        preloaded.push(img);
+      }
+    };
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      idleId = (window as unknown as { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback(
+        loadHeavyScreenshots,
+        { timeout: 3500 }
+      );
+    } else {
+      const timer = setTimeout(loadHeavyScreenshots, 2500);
+      return () => {
+        clearTimeout(timer);
+        preloaded.length = 0;
+      };
+    }
+
     return () => {
-      clearTimeout(timer);
+      if (idleId != null && typeof window !== "undefined" && "cancelIdleCallback" in window) {
+        (window as unknown as { cancelIdleCallback: (id: number) => void }).cancelIdleCallback(idleId);
+      }
       preloaded.length = 0;
     };
   }, [isActive]);
@@ -342,15 +371,47 @@ export default function PortfolioSection({
     return 0;
   });
   const scrollPosRef = useRef(scrollPos);
-  const [hasEnteredExperience, setHasEnteredExperience] = useState(() => scrollPos >= 1);
-  const [hasEnteredProjects, setHasEnteredProjects] = useState(() => scrollPos >= 1);
+  const [hasEnteredExperience, setHasEnteredExperience] = useState(() => scrollPos >= 2);
+  const [hasEnteredProjects, setHasEnteredProjects] = useState(() => scrollPos >= 1 && projectsStage === "carousel");
   useEffect(() => {
     scrollPosRef.current = scrollPos;
-    if (scrollPos >= 1) {
+    if (scrollPos === 2) {
       setHasEnteredExperience(true);
+    }
+    if (scrollPos === 1 && projectsStage === "carousel") {
       setHasEnteredProjects(true);
     }
-  }, [scrollPos]);
+  }, [scrollPos, projectsStage]);
+
+  // Warm up heavy subcomponents in the background during browser idle time so transitions never freeze
+  useEffect(() => {
+    if (!isActive) return;
+    let idleId: number | null = null;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+
+    const warmComponents = () => {
+      setHasEnteredProjects(true);
+      setHasEnteredExperience(true);
+    };
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      idleId = (window as unknown as { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback(
+        warmComponents,
+        { timeout: 1500 }
+      );
+    } else {
+      timerId = setTimeout(warmComponents, 800);
+    }
+
+    return () => {
+      if (idleId != null && typeof window !== "undefined" && "cancelIdleCallback" in window) {
+        (window as unknown as { cancelIdleCallback: (id: number) => void }).cancelIdleCallback(idleId);
+      }
+      if (timerId != null) {
+        clearTimeout(timerId);
+      }
+    };
+  }, [isActive]);
 
   const hasRestoredPortfolioRef = useRef(false);
 
@@ -418,6 +479,8 @@ export default function PortfolioSection({
   const scrollUpAccumulatorRef = useRef(0);
   const scrollUpResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollDownToServicesAccumulatorRef = useRef(0);
+  const introScrollDownAccumulatorRef = useRef(0);
+  const introResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onPortfolioProgressChangeRef = useRef(onPortfolioProgressChange);
   useEffect(() => {
@@ -486,7 +549,8 @@ export default function PortfolioSection({
   const updateScrollPos = useCallback((newPos: number, nextProjectsStage?: "intro" | "carousel") => {
     scrollPosRef.current = newPos;
     if (newPos >= 1) {
-      arrivalLockUntilRef.current = Date.now() + 650;
+      arrivalLockUntilRef.current = Date.now() + 850;
+      introScrollDownAccumulatorRef.current = 0;
     }
     if (newPos === 1) {
       const stage = nextProjectsStage ?? "intro";
@@ -498,7 +562,6 @@ export default function PortfolioSection({
   }, []);
 
   // Centralized upward transition: Creations (MY CREATIONS.EXE) -> About (WHO'S BEHIND THE SCREEN?)
-  // Compulsorily stops at About and absorbs the remaining swipe inertia for 850ms
   const handleScrollUpToAbout = useCallback(() => {
     if (scrollPosRef.current === 0) {
       return;
@@ -506,8 +569,9 @@ export default function PortfolioSection({
 
     // Switch to About section (Section 0)
     updateScrollPos(0);
-    // Brief cooldown so incoming swipe momentum doesn't skip past About immediately
-    aboutArrivalCooldownUntilRef.current = Date.now() + 450;
+    // Compulsory pit stop cooldown so incoming swipe momentum doesn't skip past About
+    aboutArrivalCooldownUntilRef.current = Date.now() + 850;
+    hasStoppedAtAboutRef.current = false;
     scrollDownAccumulatorRef.current = 0;
     scrollUpAccumulatorRef.current = 0;
   }, [updateScrollPos]);
@@ -732,8 +796,8 @@ export default function PortfolioSection({
         setScrollPos(0);
         setProjectsStage("intro");
       }
-      // Compulsory pit stop at About: cushion and absorb all incoming transition scroll momentum for 850ms
-      aboutArrivalCooldownUntilRef.current = Date.now() + 850;
+      // Compulsory Pit Stop at About Me: absorbs all residual transition momentum so the page locks at About Me
+      aboutArrivalCooldownUntilRef.current = Date.now() + 950;
       hasStoppedAtAboutRef.current = false;
       scrollDownAccumulatorRef.current = 0;
       scrollUpAccumulatorRef.current = 0;
@@ -773,6 +837,10 @@ export default function PortfolioSection({
       if (scrollUpResetTimeoutRef.current) {
         clearTimeout(scrollUpResetTimeoutRef.current);
         scrollUpResetTimeoutRef.current = null;
+      }
+      if (introResetTimeoutRef.current) {
+        clearTimeout(introResetTimeoutRef.current);
+        introResetTimeoutRef.current = null;
       }
     };
   }, [isActive]);
@@ -939,11 +1007,12 @@ export default function PortfolioSection({
       }
 
       if (scrollPos === 0) {
-        // In About section: responsive scroll thresholds with zero rubber-band bounce-back
+        // In About section: compulsory pit stop after transition with zero overshoot
         if (e.deltaY > 0) {
           e.stopPropagation();
 
           if (Date.now() < aboutArrivalCooldownUntilRef.current) {
+            scrollDownAccumulatorRef.current = 0;
             return;
           }
 
@@ -952,7 +1021,7 @@ export default function PortfolioSection({
             scrollDownResetTimeoutRef.current = null;
           }
 
-          const requiredThreshold = !hasStoppedAtAboutRef.current ? 110 : 80;
+          const requiredThreshold = !hasStoppedAtAboutRef.current ? 75 : 40;
           scrollDownAccumulatorRef.current += e.deltaY;
 
           if (scrollDownAccumulatorRef.current >= requiredThreshold) {
@@ -962,7 +1031,7 @@ export default function PortfolioSection({
           } else {
             scrollDownResetTimeoutRef.current = setTimeout(() => {
               scrollDownAccumulatorRef.current = 0;
-            }, 450);
+            }, 350);
           }
         } else if (e.deltaY < 0) {
           e.stopPropagation();
@@ -976,14 +1045,28 @@ export default function PortfolioSection({
         scrollUpAccumulatorRef.current = 0;
 
         if (Date.now() < arrivalLockUntilRef.current) {
+          introScrollDownAccumulatorRef.current = 0;
           return;
         }
 
         if (projectsStage === "intro") {
-          // Next scroll down compulsorily enters the horizontal project tabs; scroll up goes back to About
-          if (e.deltaY > 10) {
-            enterProjectsCarousel();
-          } else if (e.deltaY < -10) {
+          // Require a deliberate new downward scroll to enter the project tabs (never auto-advance from previous scroll momentum)
+          if (e.deltaY > 0) {
+            if (introResetTimeoutRef.current) {
+              clearTimeout(introResetTimeoutRef.current);
+              introResetTimeoutRef.current = null;
+            }
+            introScrollDownAccumulatorRef.current += e.deltaY;
+            if (introScrollDownAccumulatorRef.current >= 65) {
+              introScrollDownAccumulatorRef.current = 0;
+              enterProjectsCarousel();
+            } else {
+              introResetTimeoutRef.current = setTimeout(() => {
+                introScrollDownAccumulatorRef.current = 0;
+              }, 350);
+            }
+          } else if (e.deltaY < -25) {
+            introScrollDownAccumulatorRef.current = 0;
             handleScrollUpToAbout();
           }
           return;
@@ -1079,7 +1162,7 @@ export default function PortfolioSection({
       {/* Strictly bounded between top and the brown horizon bar (0% to 92%). Nothing ever crosses onto the horizon! */}
       <div className="absolute top-0 left-0 right-0 h-[92%] overflow-hidden z-10">
         <div
-          className="w-full h-full will-change-transform transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
+          className="w-full h-full will-change-transform transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
           style={{
             transform: `translate3d(0, -${scrollPos * 100}%, 0)`,
           }}
@@ -1237,7 +1320,7 @@ export default function PortfolioSection({
           <div className={`relative w-full h-full overflow-hidden ${isActive && scrollPos === 1 ? "pointer-events-auto" : "pointer-events-none"}`}>
             {/* 2A. Text Reveal Interlude: "Mmm... let's see what she's been cooking." */}
             <div
-              className={`absolute inset-0 z-20 flex flex-col items-center justify-center px-6 sm:px-10 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${projectsStage === "intro"
+              className={`absolute inset-0 z-20 flex flex-col items-center justify-center px-6 sm:px-10 transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${projectsStage === "intro"
                 ? "opacity-100 translate-y-0 pointer-events-auto"
                 : "opacity-0 -translate-y-full pointer-events-none"
                 }`}
@@ -1361,7 +1444,7 @@ export default function PortfolioSection({
                       transition: "mask-image 0.3s ease, -webkit-mask-image 0.3s ease",
                     }}
                   >
-                    {(scrollPos >= 1 || hasEnteredProjects) && (
+                    {(hasEnteredProjects || projectsStage === "carousel" || scrollPos === 2) && (
                       <FlexCarousel
                         ref={carouselRef}
                         items={PROJECT_ITEMS}
@@ -1412,7 +1495,7 @@ export default function PortfolioSection({
           {/* SECTION 3: WHAT WE SHIP / BRAND APPART SERVICES                 */}
           {/* ═══════════════════════════════════════════════════════════════ */}
           <div className={`relative w-full h-full overflow-hidden flex flex-col items-center justify-start transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${isActive && scrollPos === 2 ? "pointer-events-auto opacity-100 visible" : "pointer-events-none opacity-0 invisible"}`}>
-            {(scrollPos >= 1 || hasEnteredExperience) && (
+            {(hasEnteredExperience || scrollPos === 2) && (
               <ExperienceSection
                 isActive={isActive && scrollPos === 2}
                 activeCardIndex={servicesCardIndex}

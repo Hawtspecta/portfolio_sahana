@@ -223,7 +223,13 @@ function drawEmblemArt(
   ctx.restore();
 }
 
+const achievementTextureCache = new Map<string, string>();
+
 function renderAchievementCardTexture(item: AchievementCardData): string {
+  const cacheKey = `${item.count}_${item.title}`;
+  if (achievementTextureCache.has(cacheKey)) {
+    return achievementTextureCache.get(cacheKey)!;
+  }
   const W = 840;
   const H = 1080;
   const scale = 1.25;
@@ -346,7 +352,9 @@ function renderAchievementCardTexture(item: AchievementCardData): string {
   ctx.textBaseline = "middle";
   ctx.fillText("CLICK FOR DETAILS ↗", centerX, pillY + pillH / 2 + 1);
 
-  return canvas.toDataURL("image/png");
+  const dataUrl = canvas.toDataURL("image/png");
+  achievementTextureCache.set(cacheKey, dataUrl);
+  return dataUrl;
 }
 
 export interface AchievementsGalleryHandle {
