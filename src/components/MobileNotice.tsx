@@ -1,20 +1,10 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
-
-const subscribe = (callback: () => void) => {
-  window.addEventListener("resize", callback);
-  return () => window.removeEventListener("resize", callback);
-};
-
-const getIsMobile = () => {
-  const narrow = window.innerWidth < 768;
-  const coarse = window.matchMedia("(pointer: coarse)").matches && window.innerWidth < 1024;
-  return narrow || coarse;
-};
+import { useState } from "react";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 export default function MobileNotice() {
-  const isMobile = useSyncExternalStore(subscribe, getIsMobile, () => false);
+  const isMobile = useIsMobile();
   const [isResumeOpen, setIsResumeOpen] = useState(false);
 
   if (!isMobile) return null;
@@ -81,16 +71,6 @@ export default function MobileNotice() {
               </svg>
               <span>View Resume</span>
             </button>
-
-            <a
-              href="/assets/Sahana_Nayak_Resume.pdf"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-full border border-[#4a2c1d] bg-[#fdf6ec] text-[#2b180e] text-[11px] font-bold uppercase tracking-wider hover:bg-[#efe0ce] active:scale-95 transition-all cursor-pointer shadow-sm"
-              style={{ fontFamily: "'Space Mono', monospace" }}
-            >
-              <span>Open PDF in New Tab ↗</span>
-            </a>
           </div>
         </div>
       </div>

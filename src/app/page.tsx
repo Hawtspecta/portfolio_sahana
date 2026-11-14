@@ -10,6 +10,7 @@ import SideScrollBar from "@/components/SideScrollBar";
 import RocketBoostSkip from "@/components/RocketBoostSkip";
 import LampToggle from "@/components/LampToggle";
 import { initGlobalLenis, useLenis } from "@/lib/lenis";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 export default function Home() {
   const [isLastFrame, setIsLastFrame] = useState(false);
@@ -34,6 +35,7 @@ export default function Home() {
   const [isProjectLiveExpanded, setIsProjectLiveExpanded] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("light");
   const hasRestoredRef = useRef(false);
+  const isMobile = useIsMobile();
 
   const lenis = useLenis();
 
@@ -436,6 +438,10 @@ export default function Home() {
     isSplashReady &&
     !isPortfolioActive &&
     !isProjectLiveExpanded;
+
+  if (isMobile) {
+    return <main className="min-h-screen w-full bg-[#1c0f08]" />;
+  }
 
   return (
     <>
